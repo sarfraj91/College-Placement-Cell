@@ -1,0 +1,55 @@
+/* ================= ADMIN PROFILE ================= */
+.admin-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.admin-profile-card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-profile-main {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.admin-profile-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  object-fit: cover;
+}
+
+.admin-profile-fields {
+  display: grid;
+  gap: 12px;
+  max-width: 480px;
+}
+
+.admin-profile-actions {
+  margin-top: 8px;
+}
+
+.admin-alert {
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.admin-alert.error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #ffb2b2;
+}
+
+.admin-alert.success {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #9ef5bd;
+}

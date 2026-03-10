@@ -1,0 +1,140 @@
+/* ================= DRAWER OVERLAY ================= */
+.drawer-backdrop {
+  position: fixed;
+ 
+  inset: 0;
+  background: rgba(6, 10, 22, 0.65);
+  z-index: 50;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.drawer-panel {
+  width: min(560px, 100%);
+  background: rgba(8, 14, 28, 0.95);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 65px;
+  padding: 24px;
+  overflow-y: auto;
+  color: var(--text);
+  position: relative;
+  animation: slideIn 0.25s ease;
+}
+
+.drawer-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 120, 120, 0.2);
+  color: #ffb2b2;
+  border: 1px solid rgba(255, 120, 120, 0.35);
+  font-weight: 700;
+}
+
+/* ================= HEADER ================= */
+.drawer-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding-right: 40px;
+}
+
+.drawer-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.drawer-name {
+  font-family: var(--font-display);
+  font-size: 20px;
+  text-transform: capitalize;
+}
+
+.drawer-email {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.drawer-meta {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+/* ================= SECTIONS ================= */
+.drawer-section {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(24px);
+    opacity: 0.7;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.drawer-section h3 {
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+
+.drawer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+  row-gap: 10px;
+  font-size: 13px;
+}
+
+.drawer-full {
+  grid-column: 1 / -1;
+}
+
+.drawer-info {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.drawer-info span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.drawer-info strong {
+  color: var(--text);
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.drawer-link {
+  display: block;
+  color: var(--accent-2);
+  text-decoration: underline;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .drawer-grid {
+    grid-template-columns: 1fr;
+  }
+}

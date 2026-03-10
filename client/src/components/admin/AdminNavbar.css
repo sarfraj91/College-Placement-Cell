@@ -1,0 +1,111 @@
+/* ================= ADMIN NAVBAR ================= */
+.admin-navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 72px;
+  z-index: 1000;
+  background: rgba(7, 11, 26, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.admin-navbar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 100%;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+/* ================= BRAND ================= */
+.admin-brand {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* ================= LINKS ================= */
+.admin-link {
+  color: var(--muted);
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.admin-link:hover {
+  color: var(--text);
+}
+
+.admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* ================= ADMIN USER ================= */
+.admin-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  cursor: pointer;
+}
+
+.admin-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.admin-name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admin-dropdown {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  background: rgba(8, 14, 28, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  width: 170px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  z-index: 10;
+}
+
+.admin-dropdown button {
+  background: none;
+  border: none;
+  color: var(--text);
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-dropdown button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.admin-dropdown .danger {
+  color: #ff9c9c;
+}
+
+@media (max-width: 640px) {
+  .admin-name {
+    display: none;
+  }
+}

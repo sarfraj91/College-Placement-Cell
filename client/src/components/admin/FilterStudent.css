@@ -1,0 +1,98 @@
+/* ================= FILTER PAGE ================= */
+.filter-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.filter-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ================= PANELS ================= */
+.filter-panel {
+  padding: 24px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.filter-btn {
+  align-self: end;
+  width: 100%;
+}
+
+.result-panel,
+.email-panel {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.result-panel {
+  overflow-x: auto;
+}
+
+.result-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  margin: 0;
+}
+
+.select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ================= TABLE ================= */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.data-table thead {
+  color: var(--muted);
+}
+
+.data-table th,
+.data-table td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ================= FORM LABELS ================= */
+.input-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ================= STATUS ================= */
+.status {
+  font-size: 13px;
+}
+
+.status.error {
+  color: #ff9c9c;
+}
+
+.status.success {
+  color: #9ef5bd;
+}
+
+/* ================= FOOTER ================= */
+.filter-footer {
+  text-align: right;
+  font-size: 13px;
+}

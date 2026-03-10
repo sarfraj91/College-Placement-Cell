@@ -1,0 +1,104 @@
+/* ================= PROFILE FORM ================= */
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.form-title {
+  text-align: center;
+}
+
+.form-alert {
+  padding: 14px;
+  border-radius: 16px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.form-alert.error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ffb2b2;
+}
+
+.form-section {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-section-title {
+  margin: 0;
+}
+
+.form-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.textarea-span {
+  grid-column: span 2;
+}
+
+.form-submit {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ================= UPLOAD CARDS ================= */
+.upload-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  padding: 20px;
+  text-align: center;
+}
+
+.upload-btn {
+  margin-top: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.upload-preview {
+  margin-top: 14px;
+  height: 96px;
+  border-radius: 12px;
+  object-fit: cover;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.other-cert-card {
+  position: relative;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  padding: 20px;
+}
+
+.remove-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  color: #ff9c9c;
+  background: transparent;
+  border: none;
+  font-size: 18px;
+}
+
+@media (max-width: 768px) {
+  .textarea-span {
+    grid-column: span 1;
+  }
+}

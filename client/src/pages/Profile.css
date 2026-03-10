@@ -1,0 +1,132 @@
+/* ================= PROFILE PAGE ================= */
+.profile-page {
+  display: flex;
+  align-items: flex-start;
+}
+
+.profile-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.profile-loading {
+  text-align: center;
+  padding: 120px 0;
+  color: var(--muted);
+}
+
+/* ================= HEADER ================= */
+/* ================= HERO ================= */
+.profile-hero {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.profile-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.profile-hero-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-avatar {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.profile-upload {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.profile-hero-stats {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.stat-chip {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat-chip span {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.profile-status {
+  color: #9ef5bd;
+  font-weight: 600;
+}
+
+/* ================= SECTIONS ================= */
+.profile-section {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.profile-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.profile-value {
+  font-weight: 600;
+}
+
+/* ================= CERTIFICATES ================= */
+.profile-cert {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-cert-title {
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.profile-cert-link {
+  color: var(--accent-2);
+  text-decoration: underline;
+  font-size: 13px;
+}
+
+/* ================= ACTIONS ================= */
+.profile-actions {
+  display: flex;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .profile-hero-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
