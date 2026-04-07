@@ -5,10 +5,15 @@ import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
 import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import resumeRoutes from './routes/resumeRoutes.js';
+import jobAIRoutes from "./routes/jobDescriptionRoutes.js";
+import aiRoutes from "./routes/aiRoutes.js";
+
 import jobRoutes from './routes/jobRoutes.js';
 import studentJobRoutes from "./routes/studentJobRoutes.js";
 import  errorMiddleware  from './middlewares/errorMiddleware.js';
 import dotenv from "dotenv";
+
 dotenv.config();
 
 
@@ -36,7 +41,12 @@ app.get('/', (req, res) => {
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/jobs', jobRoutes);
+app.use('/api/v1/jobs', jobAIRoutes);
+app.use('/api/v1/ai', aiRoutes);
 app.use('/api/v1/student', studentJobRoutes);
+app.use('/api/v1/resume', resumeRoutes);
+// Legacy mount kept for backward compatibility.
+app.use('/api/v1/generatejobdescription', jobAIRoutes);
 app.use(errorMiddleware);
 
 

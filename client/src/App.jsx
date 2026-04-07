@@ -26,6 +26,9 @@ import FilterStudents from "./components/admin/FilterStudent";
 import PostJob from "./components/job/PostJob";
 import JobList from "./components/student/JobList";
 import JobDetail from "./components/student/JobDetails";
+import ResumeAnalyzer from "./components/student/ResumeAnalyzer";
+import InterviewQAGenerator from "./components/student/InterviewQAGenerator";
+import MockInterview from "./components/student/MockInterview";
 
 
 function App() {
@@ -75,6 +78,7 @@ function App() {
             }
           />
 
+
           <Route
             path="/student/view-profile"
             element={
@@ -101,6 +105,34 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route
+            path="/student/resume-analyzer"
+            element={
+              <ProtectedRoute role="student">
+                <ResumeAnalyzer />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/preparation/qa-generator"
+            element={
+              <ProtectedRoute role="student">
+                <InterviewQAGenerator />
+              </ProtectedRoute>
+            }
+          />
+
+           <Route
+            path="/preparation/mock-interview"
+            element={
+              <ProtectedRoute role="student">
+                <MockInterview />
+              </ProtectedRoute>
+            }
+          />
+
 
           {/* 🛠 Admin */}
           <Route

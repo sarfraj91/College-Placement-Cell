@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "axios": "^1.13.6",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.9.0",
     "cookie-parser": "^1.4.7",
@@ -24,9 +25,13 @@
     "mogoose": "^0.0.1-security",
     "mongoose": "^9.1.4",
     "morgan": "^1.10.1",
-    "multer": "^2.0.2",
+    "multer": "^2.1.1",
+    "natural": "^8.1.1",
     "nodemailer": "^7.0.13",
     "path": "^0.12.7",
+    "pdf-parse-new": "^2.0.0",
+    "pdf-parser": "^1.0.5",
+    "stopword": "^3.1.5",
     "url": "^0.11.4"
   }
 }

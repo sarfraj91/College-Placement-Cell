@@ -1,0 +1,18 @@
+Resume Tips:
+- Use bullet points
+- Add measurable achievements
+- Mention tech stack clearly
+
+Interview Preparation:
+- Practice DSA
+- Learn system design basics
+- Prepare HR questions
+
+Skill Gap:
+- Focus on in-demand skills like Python, SQL, React
+- Build real-world projects
+
+Placement Process:
+- Aptitude round
+- Technical interview
+- HR interview

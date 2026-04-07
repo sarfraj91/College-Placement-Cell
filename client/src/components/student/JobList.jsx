@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { getStudentJobs } from "../../services/jobApi.jsx";
@@ -9,10 +9,43 @@ const getLogoUrl = (logo) => {
   return logo.secure_url || "";
 };
 
+const formatDate = (value) => {
+  if (!value) return "Not specified";
+  return new Date(value).toLocaleDateString("en-IN");
+};
+
+const statusFromJob = (job) => {
+  if (job.hasApplied) {
+    return {
+      label: "Applied",
+      classes:
+        "border-emerald-400/50 bg-emerald-500/15 text-emerald-200",
+    };
+  }
+  if (job.applicationsClosed) {
+    return {
+      label: "Closed",
+      classes: "border-rose-400/50 bg-rose-500/15 text-rose-200",
+    };
+  }
+  if (job.canApply) {
+    return {
+      label: "Can Apply",
+      classes: "border-sky-400/50 bg-sky-500/15 text-sky-200",
+    };
+  }
+  return {
+    label: "Invite Required",
+    classes: "border-amber-400/50 bg-amber-500/15 text-amber-200",
+  };
+};
+
 const JobList = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     let isMounted = true;
@@ -37,25 +70,106 @@ const JobList = () => {
     };
   }, []);
 
+  const stats = useMemo(() => {
+    const total = jobs.length;
+    const canApply = jobs.filter((job) => job.canApply).length;
+    const applied = jobs.filter((job) => job.hasApplied).length;
+    const closed = jobs.filter((job) => job.applicationsClosed).length;
+    return { total, canApply, applied, closed };
+  }, [jobs]);
+
+  const filteredJobs = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return jobs.filter((job) => {
+      const passesQuery =
+        !needle ||
+        job.jobTitle?.toLowerCase().includes(needle) ||
+        job.company?.name?.toLowerCase().includes(needle) ||
+        job.employmentDetails?.location?.toLowerCase().includes(needle);
+
+      if (!passesQuery) return false;
+
+      switch (statusFilter) {
+        case "canApply":
+          return job.canApply;
+        case "applied":
+          return job.hasApplied;
+        case "closed":
+          return job.applicationsClosed;
+        case "invite":
+          return !job.canApply && !job.hasApplied && !job.applicationsClosed;
+        default:
+          return true;
+      }
+    });
+  }, [jobs, query, statusFilter]);
+
   return (
     <div className="page-shell">
-      <div className="page-inner max-w-6xl space-y-6">
+      <div className="page-inner max-w-7xl space-y-6">
         <motion.header
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-6 md:p-8"
+          className="glass-card p-6 md:p-8 space-y-4"
         >
-          <h1 className="section-title">Available Jobs</h1>
-          <p className="muted mt-2">
-            All jobs posted by admin are visible here. Only invited students can
-            apply.
-          </p>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="section-title">Explore Opportunities</h1>
+              <p className="muted mt-2">
+                Find roles, track your application status, and apply to invited
+                jobs before deadlines.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <StatChip label="Total" value={stats.total} />
+              <StatChip label="Can Apply" value={stats.canApply} />
+              <StatChip label="Applied" value={stats.applied} />
+              <StatChip label="Closed" value={stats.closed} />
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by role, company, or location..."
+              className="input"
+            />
+            <div className="flex flex-wrap gap-2">
+              <FilterButton
+                active={statusFilter === "all"}
+                onClick={() => setStatusFilter("all")}
+                label="All"
+              />
+              <FilterButton
+                active={statusFilter === "canApply"}
+                onClick={() => setStatusFilter("canApply")}
+                label="Can Apply"
+              />
+              <FilterButton
+                active={statusFilter === "applied"}
+                onClick={() => setStatusFilter("applied")}
+                label="Applied"
+              />
+              <FilterButton
+                active={statusFilter === "closed"}
+                onClick={() => setStatusFilter("closed")}
+                label="Closed"
+              />
+              <FilterButton
+                active={statusFilter === "invite"}
+                onClick={() => setStatusFilter("invite")}
+                label="Invite Required"
+              />
+            </div>
+          </div>
         </motion.header>
 
         {loading && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((key) => (
-              <div key={key} className="glass-card h-52 animate-pulse" />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map((key) => (
+              <div key={key} className="glass-card h-56 animate-pulse" />
             ))}
           </div>
         )}
@@ -66,89 +180,132 @@ const JobList = () => {
           </p>
         )}
 
-        {!loading && !error && jobs.length === 0 && (
+        {!loading && !error && filteredJobs.length === 0 && (
           <div className="glass-card p-6 md:p-8">
-            <p className="text-lg">No jobs posted yet.</p>
+            <p className="text-lg">No jobs found for the selected filters.</p>
           </div>
         )}
 
-        {!loading && !error && jobs.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {jobs.map((job, idx) => (
-              <motion.article
-                key={job._id}
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.04 }}
-                className="glass-card p-5 flex flex-col gap-4"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={getLogoUrl(job.company?.logo) || "/default-avatar.png"}
-                      alt={job.company?.name || "Company"}
-                      className="h-8 w-8 rounded-md border border-white/20 object-cover"
-                    />
-                    <span className="badge">{job.company?.name || "Company"}</span>
-                  </div>
-                  {job.hasApplied ? (
-                    <span className="badge !bg-emerald-500/20 !border-emerald-400/50 !text-emerald-200">
-                      Applied
-                    </span>
-                  ) : job.applicationsClosed ? (
-                    <span className="badge !bg-rose-500/20 !border-rose-400/50 !text-rose-200">
-                      Closed
-                    </span>
-                  ) : job.canApply ? (
-                    <span className="badge !bg-sky-500/20 !border-sky-400/50 !text-sky-200">
-                      Can Apply
-                    </span>
-                  ) : (
-                    <span className="badge !bg-amber-500/20 !border-amber-400/50 !text-amber-200">
-                      Invite Required
-                    </span>
-                  )}
-                </div>
+        {!loading && !error && filteredJobs.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {filteredJobs.map((job, idx) => {
+              const status = statusFromJob(job);
+              const topSkills = Array.isArray(job.skills?.mustHave)
+                ? job.skills.mustHave.slice(0, 4)
+                : [];
 
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    {job.jobTitle}
-                  </h2>
-                  <p className="muted text-sm mt-1">
-                    {job.employmentDetails?.location || "Location not specified"}
-                  </p>
-                </div>
-
-                <div className="text-sm text-slate-200/90 space-y-1">
-                  <p>
-                    Salary:{" "}
-                    <span className="muted">
-                      {job.compensation?.salaryRange || "As per company norms"}
-                    </span>
-                  </p>
-                  <p>
-                    Last Date:{" "}
-                    <span className="muted">
-                      {job.timeline?.lastDate
-                        ? new Date(job.timeline.lastDate).toLocaleDateString("en-IN")
-                        : "Not specified"}
-                    </span>
-                  </p>
-                </div>
-
-                <Link
-                  to={`/student/jobs/${job._id}`}
-                  className="btn-primary mt-auto w-full text-center"
+              return (
+                <motion.article
+                  key={job._id}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  className="glass-card p-5 flex flex-col gap-4"
                 >
-                  View Details
-                </Link>
-              </motion.article>
-            ))}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={getLogoUrl(job.company?.logo) || "/default-avatar.png"}
+                        alt={job.company?.name || "Company"}
+                        className="h-11 w-11 rounded-lg border border-white/20 object-cover"
+                      />
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {job.company?.name || "Company"}
+                        </p>
+                        <p className="muted text-xs">
+                          {job.employmentDetails?.location || "Location not specified"}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`badge ${status.classes}`}>{status.label}</span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-semibold leading-snug">{job.jobTitle}</h2>
+                    <p className="muted text-sm line-clamp-2">
+                      {job.jobDescription || "Description not available"}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <MetaTile
+                      label="Job Type"
+                      value={job.employmentDetails?.employmentType || "Not specified"}
+                    />
+                    <MetaTile
+                      label="Salary"
+                      value={job.compensation?.salaryRange || "As per company"}
+                    />
+                    <MetaTile label="Deadline" value={formatDate(job.timeline?.lastDate)} />
+                    <MetaTile
+                      label="Work Mode"
+                      value={job.employmentDetails?.workMode || "Not specified"}
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {topSkills.length > 0 ? (
+                      topSkills.map((skill) => (
+                        <span key={`${job._id}-${skill}`} className="badge">
+                          {skill}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="muted text-xs">Skills not specified</span>
+                    )}
+                  </div>
+
+                  <div className="mt-auto grid gap-2">
+                    <Link
+                      to={`/student/jobs/${job._id}`}
+                      className="btn-primary w-full justify-center"
+                    >
+                      View Details
+                    </Link>
+                    <Link
+                      to={`/student/resume-analyzer?jobId=${job._id}`}
+                      className="btn-ghost w-full justify-center"
+                    >
+                      Analyze Resume
+                    </Link>
+                  </div>
+                </motion.article>
+              );
+            })}
           </div>
         )}
       </div>
     </div>
   );
 };
+
+const StatChip = ({ label, value }) => (
+  <div className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-center">
+    <p className="muted text-[11px] uppercase tracking-wide">{label}</p>
+    <p className="text-base font-semibold">{value}</p>
+  </div>
+);
+
+const FilterButton = ({ active, onClick, label }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+      active
+        ? "border-cyan-300/55 bg-cyan-400/20 text-cyan-100"
+        : "border-white/15 bg-white/5 text-slate-300 hover:border-cyan-300/35"
+    }`}
+  >
+    {label}
+  </button>
+);
+
+const MetaTile = ({ label, value }) => (
+  <div className="rounded-lg border border-white/10 bg-white/5 p-2">
+    <p className="muted text-[10px] uppercase tracking-wide">{label}</p>
+    <p className="text-xs">{value}</p>
+  </div>
+);
 
 export default JobList;

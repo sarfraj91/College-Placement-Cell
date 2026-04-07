@@ -6,6 +6,7 @@ import {
   getStudentJobs,
 } from "../../services/jobApi.jsx";
 import "./StudentDashboard.css";
+import ChatBot from "./ChatBot.jsx";
 
 const getLogoUrl = (logo) => {
   if (!logo) return "";
@@ -81,6 +82,7 @@ const StudentDashboard = () => {
 
   return (
     <div className="page-shell">
+      <ChatBot />
       <div className="page-inner dashboard">
         <div className="dash-header">
           <h2 className="section-title">Student Dashboard</h2>
@@ -113,6 +115,16 @@ const StudentDashboard = () => {
             </p>
             <Link className="btn-primary" to="/job">
               Browse Jobs
+            </Link>
+          </div>
+
+          <div className="dash-card">
+            <h3>Resume Intelligence</h3>
+            <p className="muted">
+              Analyze your uploaded resume, uncover missing skills, and open matched jobs from campus and external platforms.
+            </p>
+            <Link className="btn-primary" to="/student/resume-analyzer">
+              Open Analyzer
             </Link>
           </div>
 

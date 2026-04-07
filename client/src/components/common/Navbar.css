@@ -12,14 +12,23 @@
   padding: 0 32px;
   background: rgba(7, 11, 26, 0.7);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(18px);
+  gap: 18px;
 }
 
 /* ================= BRAND ================= */
 .nav-left {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
+}
+
+.nav-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
 .logo {
@@ -34,12 +43,68 @@
 
 .nav-link {
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 400;
   transition: color 0.2s ease;
 }
 
 .nav-link:hover {
   color: var(--text);
+}
+
+.nav-pill-link,
+.nav-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e8eefc;
+  font-weight: 600;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.nav-pill-link:hover,
+.nav-menu-button:hover {
+  border-color: rgba(90, 176, 255, 0.42);
+  background: rgba(90, 176, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.nav-menu {
+  position: relative;
+}
+
+.nav-submenu {
+  position: absolute;
+  top: 52px;
+  left: 0;
+  min-width: 220px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(8, 14, 28, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: var(--shadow);
+}
+
+.nav-submenu a {
+  display: block;
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  transition: background 0.2s ease;
+}
+
+.nav-submenu a:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* ================= ACTIONS ================= */
@@ -50,7 +115,7 @@
 }
 
 .btn.primary {
-  padding: 10px 16px;
+  padding: 5px 8px;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #06121a;
@@ -115,6 +180,21 @@
 
 /* ================= RESPONSIVE ================= */
 @media (max-width: 640px) {
+  .navbar {
+    padding: 0 16px;
+  }
+
+  .nav-center {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .nav-pill-link,
+  .nav-menu-button {
+    white-space: nowrap;
+  }
+
   .username {
     display: none;
   }

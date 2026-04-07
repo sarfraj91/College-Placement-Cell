@@ -6,7 +6,9 @@ import "./Navbar.css";
 const Navbar = () => {
   const { user, loading, logout } = useAuth(); // ✅ FIX
   const [open, setOpen] = useState(false);
+  const [prepOpen, setPrepOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const prepRef = useRef(null);
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -21,6 +23,10 @@ const Navbar = () => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setOpen(false);
       }
+
+      if (prepRef.current && !prepRef.current.contains(e.target)) {
+        setPrepOpen(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -30,15 +36,58 @@ const Navbar = () => {
 
   return (
     <header className="navbar">
-      {/* ================= LEFT ================= */}
       <div className="nav-left">
         <Link to="/" className="logo">PlacementCell</Link>
       </div>
-       <div className="nav-left">
-        <Link to="/job" className="btn primary">view jobs</Link>
-      </div>
 
-      {/* ================= RIGHT ================= */}
+      <nav className="nav-center">
+        <Link to="/job" className="nav-pill-link">
+          View Jobs
+        </Link>
+
+        {user?.role === "student" ? (
+          <>
+            <Link to="/student/resume-analyzer" className="nav-pill-link">
+              Resume AI
+            </Link>
+
+            <div className="nav-menu" ref={prepRef}>
+              <button
+                type="button"
+                className="nav-menu-button"
+                onClick={() => setPrepOpen((previous) => !previous)}
+              >
+                Preparation
+              </button>
+
+              {prepOpen ? (
+                <div className="nav-submenu">
+                  <Link
+                    to="/preparation/qa-generator"
+                    onClick={() => setPrepOpen(false)}
+                  >
+                    Interview Q&amp;A Generator
+                  </Link>
+
+                  <Link
+                    to="/preparation/mock-interview"
+                    onClick={() => setPrepOpen(false)}
+                  >
+                    Mock Interview
+                  </Link>
+                </div>
+
+                
+
+
+
+
+              ) : null}
+            </div>
+          </>
+        ) : null}
+      </nav>
+
       <div className="nav-right">
         {loading ? null : !user ? (
           <>
@@ -58,6 +107,7 @@ const Navbar = () => {
               onClick={(e) => {
                 e.stopPropagation();
                 setOpen((prev) => !prev);
+                setPrepOpen(false);
               }}
             />
 
