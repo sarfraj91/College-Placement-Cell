@@ -62,7 +62,6 @@ const userSchema = new mongoose.Schema(
 
     rollNo: {
       type: Number,
-      unique: true,
     },
 
     branch: {
@@ -209,6 +208,14 @@ const userSchema = new mongoose.Schema(
     },
   },
   { timestamps: true },
+);
+
+userSchema.index(
+  { rollNo: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { rollNo: { $type: "number" } },
+  },
 );
 
 // 🔐 Encrypt password
