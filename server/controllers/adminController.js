@@ -535,7 +535,7 @@ export const changeAdminPasswordWithOtp = async (req, res, next) => {
   }
 };
 
-// Send an email to the selected students (uses existing nodemailer helper)
+// Send an email to the selected students through the shared Brevo helper.
 export const emailSelectedStudents = async (req, res, next) => {
   try {
     const { studentIds, subject, message, jobId } = req.body;

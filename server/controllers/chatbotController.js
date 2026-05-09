@@ -110,6 +110,16 @@ const sanitizeActiveJobSnapshot = (value) => {
 };
 
 
+const sanitizeChatSections = (value) =>
+  (Array.isArray(value) ? value : [])
+    .map((item) => ({
+      title: typeof item?.title === "string" ? item.title.trim() : "",
+      items: Array.isArray(item?.items) ? item.items.map((entry) => String(entry).trim()).filter(Boolean) : [],
+    }))
+    .filter((item) => item.title && item.items.length)
+    .slice(0, 3);
+
+
 const buildFallbackAnswer = (question, context) => {
   const lowered = String(question || "").toLowerCase();
   const matched = CHAT_FALLBACKS.find((item) =>
@@ -139,6 +149,56 @@ const buildFallbackAnswer = (question, context) => {
   return (
     "I can help with placement-related questions such as resume improvement, interview preparation, skill-gap planning, and job-search strategy. Ask a specific question and I’ll give a focused answer."
   );
+};
+
+
+const buildFallbackStructuredChat = (question, context) => {
+  const answer = buildFallbackAnswer(question, context);
+  const missingSkills = Array.isArray(context?.resume_analysis?.missing_skills)
+    ? context.resume_analysis.missing_skills.slice(0, 4)
+    : [];
+  const suggestions = Array.isArray(context?.resume_analysis?.suggestions)
+    ? context.resume_analysis.suggestions.slice(0, 3)
+    : [];
+
+  return {
+    answerTitle: "Placement Guidance",
+    answer,
+    sections: [
+      {
+        title: "Priority Focus",
+        items: missingSkills.length
+          ? missingSkills
+          : [
+              "Resume alignment",
+              "Interview storytelling",
+              "Role-specific skill-building",
+            ],
+      },
+      {
+        title: "Recommended Next Move",
+        items: suggestions.length
+          ? suggestions
+          : [
+              "Pick one target role and optimize your resume for it.",
+              "Practice one project story with context, action, and result.",
+              "Focus on the highest-impact missing skills first.",
+            ],
+      },
+    ],
+    nextSteps: suggestions.length
+      ? suggestions
+      : [
+          "Choose one target role before changing your resume.",
+          "Prepare 2 project explanations with measurable outcomes.",
+          "Ask for a weekly interview preparation plan.",
+        ],
+    followUpQuestions: [
+      "What should I improve first in my profile?",
+      "Which roles fit my current skills?",
+      "How should I prepare for interviews this week?",
+    ],
+  };
 };
 
 
@@ -252,14 +312,28 @@ export const chatWithPlacementAssistant = async (req, res) => {
       },
     );
 
+    const structuredFallback = buildFallbackStructuredChat(question, context);
+
+    const sections = sanitizeChatSections(response?.data?.sections);
+    const nextSteps = Array.isArray(response?.data?.next_steps || response?.data?.nextSteps)
+      ? (response?.data?.next_steps || response?.data?.nextSteps).map((item) => String(item).trim()).filter(Boolean).slice(0, 4)
+      : [];
+    const followUpQuestions = Array.isArray(response?.data?.follow_up_questions || response?.data?.followUpQuestions)
+      ? (response?.data?.follow_up_questions || response?.data?.followUpQuestions).map((item) => String(item).trim()).filter(Boolean).slice(0, 3)
+      : [];
+
     return res.json({
       success: true,
-      answer: response?.data?.answer || buildFallbackAnswer(question, context),
+      answer: response?.data?.answer || structuredFallback.answer,
+      answerTitle: response?.data?.answer_title || response?.data?.answerTitle || structuredFallback.answerTitle,
       intent: response?.data?.intent || "general",
       suggestions: response?.data?.suggestions || [],
       confidence: Number(response?.data?.confidence ?? 0) || 0,
       jobs: response?.data?.jobs || [],
       matchedTopics: response?.data?.matched_topics || [],
+      sections: sections.length ? sections : structuredFallback.sections,
+      nextSteps: nextSteps.length ? nextSteps : structuredFallback.nextSteps,
+      followUpQuestions: followUpQuestions.length ? followUpQuestions : structuredFallback.followUpQuestions,
       answerMode: response?.data?.answer_mode || "contextual",
       warning: response?.data?.fallback_used
         ? "Knowledge-based fallback response used."
@@ -290,14 +364,20 @@ export const chatWithPlacementAssistant = async (req, res) => {
       external_jobs: externalJobs,
     };
 
+    const structuredFallback = buildFallbackStructuredChat(question, context);
+
     return res.status(200).json({
       success: true,
-      answer: buildFallbackAnswer(question, context),
+      answer: structuredFallback.answer,
+      answerTitle: structuredFallback.answerTitle,
       intent: "general",
       suggestions: [],
       confidence: 0,
       jobs: [],
       matchedTopics: [],
+      sections: structuredFallback.sections,
+      nextSteps: structuredFallback.nextSteps,
+      followUpQuestions: structuredFallback.followUpQuestions,
       answerMode: "backend-fallback",
       warning: `AI assistant fallback: ${reason}`,
       contextFlags: {

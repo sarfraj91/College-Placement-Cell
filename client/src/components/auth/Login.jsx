@@ -1,8 +1,43 @@
 import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
+import {
+  AlertCircle,
+  ArrowRight,
+  BriefcaseBusiness,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import API from "../../services/api";
 import useAuth from "../../hooks/UseAuth";
-import "./Login.css";
+import AuthShowcase from "./AuthShowcase";
+import ParticleMesh from "../ui/ParticleMesh";
+import placementLogo from "../../assets/placement-logo.png";
+import "./Auth.css";
+
+const roleOptions = [
+  { value: "student", label: "As Student" },
+  { value: "admin", label: "As Admin" },
+];
+
+const showcaseHighlights = [
+  {
+    icon: Users,
+    title: "Student-first dashboard",
+    description: "Check openings, update your profile, and stay interview-ready.",
+  },
+  {
+    icon: BriefcaseBusiness,
+    title: "Recruitment visibility",
+    description: "Track active drives, shortlists, and every next step in one place.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Role-based access",
+    description: "Students and admins land in their own focused workspace after login.",
+  },
+];
 
 const Login = () => {
   const navigate = useNavigate();
@@ -67,74 +102,110 @@ const Login = () => {
   };
 
   return (
-    <div className="auth-page">
-      <div className="auth-grid">
-        {/* ================= FORM ================= */}
-        <div className="login-card">
-          <h2>Welcome Back 👋</h2>
-          <p className="subtitle">Login to continue</p>
+    <div className="auth-shell">
+      <div className="auth-stage">
+        <ParticleMesh className="auth-stage__mesh" />
+        <div className="auth-stage__halo" aria-hidden="true" />
 
-          {error && <p className="error-text shake">{error}</p>}
+        <div className="auth-card-shell">
+          <section className="auth-card">
+            <div className="auth-card__top">
+              <div className="auth-card__brand">
+                <img src={placementLogo} alt="Placement Cell logo" />
+                <span>Placement Portal</span>
+              </div>
 
-          <form onSubmit={handleLogin}>
-            <div className="field">
-              <label>Email</label>
-              <input
-                type="email"
-                placeholder="College Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+              <div className="auth-panel__switch" aria-label="Auth pages">
+                <span className="is-active">Login</span>
+                <Link to="/register">Register</Link>
+              </div>
             </div>
 
-            <div className="field">
-              <label>Password</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+            <div className="auth-panel__header">
+              <span className="auth-panel__eyebrow">Secure Access</span>
+              <h1>Log in</h1>
+              <p>
+                Continue to your student or admin workspace with a smaller,
+                cleaner portal card.
+              </p>
             </div>
 
-            <div className="field">
-              <label>Login As</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                required
-              >
-                <option value="">Select Role</option>
-                <option value="student">Student</option>
-                <option value="admin">Admin</option>
-              </select>
+            {error && (
+              <div className="auth-alert" role="alert">
+                <AlertCircle size={16} />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div className="auth-role-toggle" aria-label="Choose a login role">
+              {roleOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={role === option.value ? "is-active" : ""}
+                  onClick={() => setRole(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
 
-            <button className="login-btn" disabled={loading}>
-              {loading ? "Signing in..." : "Login"}
-            </button>
-          </form>
+            <form className="auth-form" onSubmit={handleLogin}>
+              <label className="auth-field">
+                <span className="auth-field__label">Email</span>
+                <div className="auth-field__input">
+                  <Mail size={16} />
+                  <input
+                    type="email"
+                    placeholder="College email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </label>
 
-          <div className="login-links">
-            <Link to="/forgetPassword">Forgot password?</Link>
-            <Link to="/register">Create account</Link>
-          </div>
+              <label className="auth-field">
+                <span className="auth-field__label">Password</span>
+                <div className="auth-field__input">
+                  <LockKeyhole size={16} />
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </label>
+
+              <div className="auth-meta">
+                <span>Pick your role before login.</span>
+                <Link to="/forgetPassword">Need help?</Link>
+              </div>
+
+              <button className="auth-submit" disabled={loading}>
+                <span>{loading ? "Signing in..." : "Login"}</span>
+                {!loading && <ArrowRight size={16} />}
+              </button>
+            </form>
+
+            <div className="auth-panel__footer">
+              <p>
+                Need a student account? <Link to="/register">Create one</Link>
+              </p>
+              <Link className="auth-panel__footer-link" to="/forgetPassword">
+                Forgot password
+              </Link>
+            </div>
+          </section>
         </div>
 
-        {/* ================= VISUAL ================= */}
-        <aside className="auth-visual">
-          <div className="auth-orb" />
-          <div className="auth-panel">
-            <h3>Placement Ready</h3>
-            <p className="muted">
-              Track your progress, keep documents ready, and stay aligned with
-              admin filters in one modern workspace.
-            </p>
-            <span className="badge">Secure • Fast • Simple</span>
-          </div>
-        </aside>
+        <AuthShowcase
+          title="Stay ready for each placement round."
+          description="Compact access with lighter colors, role-based entry, and a floating 3D scene behind the form."
+          highlights={showcaseHighlights}
+        />
       </div>
     </div>
   );

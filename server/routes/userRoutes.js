@@ -42,8 +42,7 @@ router.post(
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password/:resetToken", resetPassword);
 router.post("/change-password", isLoggedIn, changePassword);
-// ✅ Public feedback/support from footer
-router.post("/feedback", submitFeedback);
+router.post("/feedback", isLoggedIn, submitFeedback);
 router.put(
   "/updateProfile",
   isLoggedIn,

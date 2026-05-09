@@ -7,7 +7,7 @@ const AdminFooter = () => {
       <div className="admin-footer-inner">
         © {new Date().getFullYear()} Placement Cell Admin Panel
         <br />
-        Built with MERN + Tailwind
+        @MIT License | Developed by Team Placement Cell
       </div>
     </footer>
   );

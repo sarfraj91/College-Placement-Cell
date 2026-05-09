@@ -4,8 +4,10 @@ import API from "./api.jsx";
 export const generateInterviewQuestions = async (payload) => {
   const formData = new FormData();
   formData.append("resume", payload.resumeFile);
-  formData.append("role", payload.role || "full stack");
-  formData.append("difficulty", payload.difficulty || "medium");
+  formData.append("difficulty", payload.difficulty || "easy");
+  if (payload.role) {
+    formData.append("role", payload.role);
+  }
   formData.append(
     "excludeQuestions",
     JSON.stringify(Array.isArray(payload.excludeQuestions) ? payload.excludeQuestions : []),
@@ -37,7 +39,9 @@ export const generateInterviewFollowUp = async (payload) => {
 export const startMockInterview = async (payload) => {
   const formData = new FormData();
   formData.append("resume", payload.resumeFile);
-  formData.append("role", payload.role || "full stack");
+  if (payload.role) {
+    formData.append("role", payload.role);
+  }
   formData.append("difficulty", payload.difficulty || "medium");
   formData.append("englishLevel", payload.englishLevel || "medium");
   formData.append("totalQuestions", String(payload.totalQuestions || 5));

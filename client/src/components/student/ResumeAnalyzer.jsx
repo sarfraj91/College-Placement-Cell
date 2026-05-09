@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-// eslint-disable-next-line no-unused-vars
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { analyzeResume, getStudentJobs } from "../../services/jobApi";
 import ChatBot from "./ChatBot.jsx";
+import ParticleMesh from "../ui/ParticleMesh";
 import { saveChatbotContext } from "../../utils/chatbotContext.js";
 import "./ResumeAnalyzer.css";
 
@@ -239,185 +239,162 @@ const ResumeAnalyzer = ({ jobId }) => {
   const externalJobs = Array.isArray(result?.externalJobs) ? result.externalJobs : [];
 
   return (
-    <div className="page-shell">
+    <div className="page-shell resume-analyzer-shell">
       <ChatBot
         selectedJobId={selectedJobId}
         resumeAnalysis={result}
       />
       <div className="page-inner resume-analyzer-page">
-        <motion.header
+        <Motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card ra-hero"
+          className="ra-stage-card"
         >
-          <p className="ra-kicker">AI Resume Screening</p>
-          <h1 className="section-title">Resume Analyzer</h1>
-          <p className="muted ra-hero-copy">Upload, analyze, and explore matching jobs.</p>
-          <div className="ra-hero-badges">
-            <span className="badge">Keyword Match</span>
-            <span className="badge">Semantic Match</span>
-            <span className="badge">Listed Jobs</span>
-            <span className="badge">Other Jobs</span>
+          <div className="ra-stage-backdrop" aria-hidden="true">
+            <ParticleMesh className="ra-stage-mesh" />
+            <div className="ra-stage-grid" />
+            <div className="ra-stage-glow ra-stage-glow-one" />
+            <div className="ra-stage-glow ra-stage-glow-two" />
           </div>
-        </motion.header>
 
-        <div className="ra-layout">
-          <motion.section
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="glass-card ra-form-panel"
-          >
-            <div className="ra-panel-head">
-              <h2>Analyze Your Resume</h2>
-              <p className="muted">Choose a source and upload your PDF.</p>
-            </div>
+          <div className="ra-stage-shell">
+            <Motion.div
+              initial={{ opacity: 0, x: -14 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.04 }}
+              className="ra-stage-copy"
+            >
+              <span className="ra-stage-kicker">Resume Analyzer</span>
+              <h1>Resume match for the roles you want</h1>
+              <p>Upload a PDF, choose a role, and run the match.</p>
 
-            <div className="ra-mode-switch">
-              <button
-                type="button"
-                onClick={() => switchMode(ANALYSIS_MODE.LISTED)}
-                disabled={analyzing || (jobsLoading && !jobs.length)}
-                className={`ra-mode-btn ${
-                  usingListedJob
-                    ? "is-active"
-                    : ""
-                }`}
-              >
-                Listed Job
-              </button>
-              <button
-                type="button"
-                onClick={() => switchMode(ANALYSIS_MODE.CUSTOM)}
-                disabled={analyzing}
-                className={`ra-mode-btn ${
-                  !usingListedJob
-                    ? "is-active"
-                    : ""
-                }`}
-              >
-                Custom Description
-              </button>
-            </div>
+              <div className="ra-stage-pills">
+                <span className="ra-stage-pill">Keyword</span>
+                <span className="ra-stage-pill">Semantic</span>
+                <span className="ra-stage-pill">Skill Gap</span>
+              </div>
+            </Motion.div>
 
-            {usingListedJob ? (
-              <label className="ra-field">
-                <span className="input-label">Choose Job Role</span>
-                <select
-                  value={selectedJobId}
-                  onChange={(event) => {
-                    setSelectedJobId(event.target.value);
-                    setResult(null);
-                    setResultSource("");
-                  }}
-                  disabled={jobsLoading || analyzing}
-                  className="select"
+            <Motion.section
+              initial={{ opacity: 0, x: 14 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.08 }}
+              whileHover={{ y: -6, rotateX: 2.5, rotateY: -2.5 }}
+              className="ra-stage-panel"
+            >
+              <div className="ra-panel-head">
+                <h2>Run Analysis</h2>
+              </div>
+
+              <div className="ra-mode-switch">
+                <button
+                  type="button"
+                  onClick={() => switchMode(ANALYSIS_MODE.LISTED)}
+                  disabled={analyzing || (jobsLoading && !jobs.length)}
+                  className={`ra-mode-btn ${usingListedJob ? "is-active" : ""}`}
                 >
-                  {jobsLoading && <option value="">Loading jobs...</option>}
-                  {!jobsLoading && jobs.length === 0 && <option value="">No jobs available</option>}
-                  {!jobsLoading && jobs.length > 0 && jobs.map((job) => (
-                    <option key={job._id} value={job._id}>
-                      {job.jobTitle} - {job.company?.name || "Company"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <label className="ra-field">
-                <span className="input-label">Custom Job Description</span>
-                <textarea
-                  rows={8}
-                  value={customJobDescription}
-                  onChange={(event) => {
-                    setCustomJobDescription(event.target.value);
-                    setResult(null);
-                    setResultSource("");
-                  }}
+                  Listed Job
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchMode(ANALYSIS_MODE.CUSTOM)}
                   disabled={analyzing}
-                  placeholder="Paste the full job description here..."
-                  className="textarea ra-textarea"
+                  className={`ra-mode-btn ${!usingListedJob ? "is-active" : ""}`}
+                >
+                  Custom Description
+                </button>
+              </div>
+
+              {usingListedJob ? (
+                <label className="ra-field">
+                  <span className="input-label">Choose Job Role</span>
+                  <select
+                    value={selectedJobId}
+                    onChange={(event) => {
+                      setSelectedJobId(event.target.value);
+                      setResult(null);
+                      setResultSource("");
+                    }}
+                    disabled={jobsLoading || analyzing}
+                    className="select"
+                  >
+                    {jobsLoading && <option value="">Loading jobs...</option>}
+                    {!jobsLoading && jobs.length === 0 && <option value="">No jobs available</option>}
+                    {!jobsLoading && jobs.length > 0 && jobs.map((job) => (
+                      <option key={job._id} value={job._id}>
+                        {job.jobTitle} - {job.company?.name || "Company"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label className="ra-field">
+                  <span className="input-label">Custom Job Description</span>
+                  <textarea
+                    rows={8}
+                    value={customJobDescription}
+                    onChange={(event) => {
+                      setCustomJobDescription(event.target.value);
+                      setResult(null);
+                      setResultSource("");
+                    }}
+                    disabled={analyzing}
+                    placeholder="Paste the full job description here..."
+                    className="textarea ra-textarea"
+                  />
+                </label>
+              )}
+
+              <label className="ra-field">
+                <span className="input-label">Upload Resume (PDF, up to 5MB)</span>
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={handleFileChange}
+                  disabled={analyzing}
+                  className="input ra-file-input"
                 />
               </label>
-            )}
 
-            <label className="ra-field">
-              <span className="input-label">Upload Resume (PDF, up to 5MB)</span>
-              <input
-                type="file"
-                accept=".pdf,application/pdf"
-                onChange={handleFileChange}
-                disabled={analyzing}
-                className="input ra-file-input"
-              />
-            </label>
+              {file ? (
+                <div className="ra-file-meta">
+                  <span>{file.name}</span>
+                  <span>{(file.size / (1024 * 1024)).toFixed(2)} MB</span>
+                </div>
+              ) : null}
 
-            {file && (
-              <div className="ra-file-meta">
-                <span>{file.name}</span>
-                <span>{(file.size / (1024 * 1024)).toFixed(2)} MB</span>
-              </div>
-            )}
+              {usingListedJob && selectedJob ? (
+                <div className="ra-selected-job">
+                  <p>{selectedJob.jobTitle}</p>
+                  <span>{selectedJob.company?.name || "Company not specified"}</span>
+                </div>
+              ) : null}
 
-            {usingListedJob && selectedJob && (
-              <div className="ra-selected-job">
-                <p>{selectedJob.jobTitle}</p>
-                <span>{selectedJob.company?.name || "Company not specified"}</span>
-              </div>
-            )}
+              {jobsError ? <p className="ra-alert ra-alert-error">{jobsError}</p> : null}
+              {error ? <p className="ra-alert ra-alert-error">{error}</p> : null}
 
-            {jobsError && <p className="ra-alert ra-alert-error">{jobsError}</p>}
-            {error && <p className="ra-alert ra-alert-error">{error}</p>}
-
-            <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={handleAnalyze}
-              disabled={analyzeDisabled}
-              className="btn-primary ra-submit-btn"
-            >
-              {analyzing ? "Analyzing Resume..." : "Run Analysis"}
-            </motion.button>
-          </motion.section>
-
-          <motion.aside
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.08 }}
-            className="glass-card ra-info-panel"
-          >
-            <h3>Quick View</h3>
-            <CompactInfoCard
-              label="Mode"
-              value={usingListedJob ? "Listed Job" : "Custom Description"}
-            />
-            <CompactInfoCard
-              label="Source"
-              value={
-                usingListedJob
-                  ? selectedJob
-                    ? `${selectedJob.jobTitle} · ${selectedJob.company?.name || "Company"}`
-                    : "Select a listed job"
-                  : customJobDescription.trim()
-                    ? "Custom description added"
-                    : "Add custom description"
-              }
-            />
-            <CompactInfoCard
-              label="Resume"
-              value={file ? file.name : "Upload PDF resume"}
-            />
-          </motion.aside>
-        </div>
+              <Motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={handleAnalyze}
+                disabled={analyzeDisabled}
+                className="btn-primary ra-submit-btn"
+              >
+                {analyzing ? "Analyzing Resume..." : "Run Analysis"}
+              </Motion.button>
+            </Motion.section>
+          </div>
+        </Motion.section>
 
         {result && (
-          <motion.section
+          <Motion.section
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-card ra-results-panel"
+            className="ra-results-panel"
           >
             <div className="ra-results-head">
               <div>
-                <h2>Analysis Report</h2>
+                <h2>Results</h2>
                 <p className="muted">{sourceLabel}</p>
               </div>
               <span className={`ra-score-chip ${scoreMeta.tone}`}>
@@ -505,7 +482,7 @@ const ResumeAnalyzer = ({ jobId }) => {
                 <ExternalLeadCard key={`${job.source}-${job.role}`} job={job} />
               ))}
             </RecommendationSection>
-          </motion.section>
+          </Motion.section>
         )}
       </div>
     </div>
@@ -513,18 +490,15 @@ const ResumeAnalyzer = ({ jobId }) => {
 };
 
 const MetricCard = ({ title, value, subtitle }) => (
-  <article className="ra-metric-card">
+  <Motion.article
+    whileHover={{ y: -6, rotateX: 3, rotateY: -3 }}
+    transition={{ type: "spring", stiffness: 260, damping: 20 }}
+    className="ra-metric-card"
+  >
     <p className="ra-metric-title">{title}</p>
     <p className="ra-metric-value">{value}</p>
     {subtitle ? <p className="muted ra-metric-subtitle">{subtitle}</p> : null}
-  </article>
-);
-
-const CompactInfoCard = ({ label, value }) => (
-  <div className="ra-info-box ra-info-box-compact">
-    <p className="ra-info-label">{label}</p>
-    <p>{value}</p>
-  </div>
+  </Motion.article>
 );
 
 const ResultList = ({ title, tone, items = [], emptyText }) => {
@@ -571,7 +545,11 @@ const RecommendationSection = ({ title, children, emptyText }) => {
 };
 
 const InternalJobCard = ({ job }) => (
-  <article className="ra-job-card">
+  <Motion.article
+    whileHover={{ y: -6, rotateX: 3, rotateY: -3 }}
+    transition={{ type: "spring", stiffness: 260, damping: 20 }}
+    className="ra-job-card"
+  >
     <div className="ra-job-card-head">
       <span className="ra-source-pill">Listed Job</span>
       <span className="ra-count-pill">{job.matchCount || 0} matches</span>
@@ -592,11 +570,15 @@ const InternalJobCard = ({ job }) => (
         Open Job
       </Link>
     </div>
-  </article>
+  </Motion.article>
 );
 
 const ExternalLeadCard = ({ job }) => (
-  <article className="ra-job-card ra-job-card-external">
+  <Motion.article
+    whileHover={{ y: -6, rotateX: 3, rotateY: -3 }}
+    transition={{ type: "spring", stiffness: 260, damping: 20 }}
+    className="ra-job-card ra-job-card-external"
+  >
     <div className="ra-job-card-head">
       <span className="ra-source-pill">{job.source}</span>
       <span className="ra-count-pill">{job.location || "India"}</span>
@@ -617,7 +599,7 @@ const ExternalLeadCard = ({ job }) => (
         Open
       </a>
     </div>
-  </article>
+  </Motion.article>
 );
 
 const SkillPillRow = ({ items = [] }) => (

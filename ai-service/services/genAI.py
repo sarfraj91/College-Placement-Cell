@@ -1,47 +1,68 @@
-#this file is for testing genAI API, not for production use.
+from __future__ import annotations
 
-import os
+import sys
+import time
 from pathlib import Path
 
 from google import genai
 
 
-ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+if __package__ in {None, ""}:
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from services.env_loader import get_gemini_settings
+
+
 DEFAULT_MODEL_NAME = "gemini-2.5-flash"
 PROMPT = "Write how to make a resume for a software engineer."
+MAX_RETRIES = 3
+RETRY_BASE_DELAY_SECONDS = 2
 
 
-def load_env_file(env_path: Path) -> None:
-    if not env_path.exists():
-        return
-
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        value = value.strip().strip("\"'")
-        os.environ.setdefault(key.strip(), value)
+def _is_transient_gemini_error(exc: Exception) -> bool:
+    message = str(exc).upper()
+    transient_markers = (
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "RESOURCE_EXHAUSTED",
+        "UNAVAILABLE",
+        "DEADLINE_EXCEEDED",
+    )
+    return any(marker in message for marker in transient_markers)
 
 
 def main() -> int:
-    load_env_file(ENV_PATH)
-
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("GEMINI_MODEL", DEFAULT_MODEL_NAME)
-
-    if not api_key:
-        print("Set GEMINI_API_KEY or GOOGLE_API_KEY before running genAI.py.")
+    try:
+        api_key, model_name = get_gemini_settings(DEFAULT_MODEL_NAME)
+    except RuntimeError as exc:
+        print(exc)
         return 1
 
-    client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model=model_name,
-        contents=PROMPT,
-    )
-    print(response.text)
-    return 0
+    try:
+        client = genai.Client(api_key=api_key)
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=PROMPT,
+                )
+                print(response.text or "No response received.")
+                return 0
+            except Exception as exc:
+                if attempt == MAX_RETRIES or not _is_transient_gemini_error(exc):
+                    raise
+
+                delay_seconds = RETRY_BASE_DELAY_SECONDS * attempt
+                print(
+                    f"Gemini request hit a temporary error. Retrying in {delay_seconds} seconds..."
+                )
+                time.sleep(delay_seconds)
+    except Exception as exc:
+        print(f"Gemini request failed: {exc}")
+        return 1
 
 
 if __name__ == "__main__":

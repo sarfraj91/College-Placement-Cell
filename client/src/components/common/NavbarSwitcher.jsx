@@ -2,6 +2,7 @@ import useAuth from "../../hooks/UseAuth";
 import Navbar from "./Navbar";
 
 import AdminNavbar from "../admin/AdminNavbar";
+import StudentNavbar from "../student/StudentNavbar";
 
 const NavbarSwitcher = () => {
   const { user, loading } = useAuth();
@@ -12,7 +13,7 @@ const NavbarSwitcher = () => {
 
   if (user.role === "admin") return <AdminNavbar />;
 
-  return <Navbar />;
+  return <StudentNavbar />;
 };
 
 export default NavbarSwitcher;

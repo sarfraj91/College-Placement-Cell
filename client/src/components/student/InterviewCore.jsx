@@ -1,11 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
+  Activity,
+  ArrowRight,
+  Clock3,
+  FileText,
   Loader2,
   Mic,
   MicOff,
-  RotateCcw,
   Send,
   ShieldAlert,
+  Target,
+  UserRound,
+  Video,
   Volume2,
 } from "lucide-react";
 
@@ -13,24 +20,53 @@ import {
   continueMockInterview,
   finishMockInterview,
 } from "../../services/interviewQaApi.jsx";
-
+import { cancelSpeech, speakText } from "../../utils/speechPlayback.js";
+import ParticleMesh from "../ui/ParticleMesh.jsx";
 
 const formatDuration = (seconds = 0) =>
   `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 
+const formatLabel = (value = "") =>
+  String(value || "")
+    .replace(/[-_]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const createSignalCounts = () => ({
+  motionAlerts: 0,
+  noFaceAlerts: 0,
+  multiFaceAlerts: 0,
+  noVoiceAlerts: 0,
+  focusAlerts: 0,
+  blockedAlerts: 0,
+});
+
 export default function InterviewCore({
   initialSession,
   mediaStream,
-  onRestart,
+  candidateLabel = "You",
+  onFinish,
 }) {
   const videoRef = useRef(null);
   const recognitionRef = useRef(null);
   const cooldownRef = useRef({});
   const timerRef = useRef(null);
   const monitorRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const liveAnalyserRef = useRef(null);
+  const liveSourceRef = useRef(null);
+  const audioMonitorRef = useRef(null);
+  const silentStreakRef = useRef(0);
+  const speechWarningShownRef = useRef(false);
 
   const [currentQuestion, setCurrentQuestion] = useState(initialSession.question || "");
   const [interviewerReply, setInterviewerReply] = useState(initialSession.opening || "");
+  const [answerSignal, setAnswerSignal] = useState("");
+  const [coachingTip, setCoachingTip] = useState(
+    "Use a simple flow: context, action, result, then one tradeoff or learning.",
+  );
   const [history, setHistory] = useState([]);
   const [draftAnswer, setDraftAnswer] = useState("");
   const [questionIndex, setQuestionIndex] = useState(1);
@@ -40,8 +76,9 @@ export default function InterviewCore({
   const [isFinishing, setIsFinishing] = useState(false);
   const [pageError, setPageError] = useState("");
   const [notice, setNotice] = useState(initialSession.warning || "");
-  const [summary, setSummary] = useState(null);
   const [flags, setFlags] = useState([]);
+  const [voiceLevel, setVoiceLevel] = useState(0);
+  const [signalCounts, setSignalCounts] = useState(createSignalCounts);
   const [cameraState, setCameraState] = useState({
     brightness: 0,
     motion: 0,
@@ -54,22 +91,136 @@ export default function InterviewCore({
     typeof window !== "undefined" &&
     Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
 
-  const pushFlag = (message, key, wait = 18000) => {
+  const totalQuestionCount = Math.max(Number(initialSession.totalQuestions) || 1, 1);
+  const faceAlertCount = signalCounts.noFaceAlerts + signalCounts.multiFaceAlerts;
+  const focusAlertCount = signalCounts.focusAlerts + signalCounts.blockedAlerts;
+  const recentFlags = useMemo(() => flags.slice(0, 3), [flags]);
+  const answerWordCount = useMemo(() => {
+    const trimmedAnswer = draftAnswer.trim();
+    return trimmedAnswer ? trimmedAnswer.split(/\s+/).length : 0;
+  }, [draftAnswer]);
+  const trimmedDraftAnswer = draftAnswer.trim();
+  const canSubmitAnswer = trimmedDraftAnswer.length >= 5 && !isSubmitting && !isFinishing;
+  const questionProgressPercent = Math.max(
+    8,
+    Math.min(100, Math.round((questionIndex / totalQuestionCount) * 100)),
+  );
+  const answerGuidance =
+    answerWordCount >= 80
+      ? "Strong detail. Do one quick clarity pass and finish with the result or impact."
+      : answerWordCount >= 30
+        ? "Good start. Add one concrete metric, tradeoff, or outcome before you submit."
+        : "Use a simple flow: situation, action, and result. One concrete example is enough.";
+  const voiceMeterPercent = useMemo(
+    () => Math.max(4, Math.min(100, Math.round(voiceLevel * 100))),
+    [voiceLevel],
+  );
+  const detectedFaceCount = cameraState.faceCount ?? 1;
+  const movementMetric = cameraState.motion || signalCounts.motionAlerts;
+  const securityWarning =
+    signalCounts.motionAlerts > 10
+      ? "Movement alerts are getting high. Stay steady and keep the camera centered."
+      : faceAlertCount >= 3
+        ? "Face visibility alerts are increasing. Keep only one face visible in the frame."
+        : signalCounts.noVoiceAlerts >= 3
+          ? "Very low voice activity is being detected. Speak clearly into the microphone."
+          : "";
+  const interviewerStatus = isFinishing
+    ? "Wrapping up"
+    : isSubmitting
+      ? "Reviewing your answer"
+      : currentQuestion
+        ? "Awaiting your response"
+        : "Preparing the next question";
+  const candidateMode = recognitionSupported
+    ? isListening
+      ? "Voice capture"
+      : "Voice ready"
+    : "Typing mode";
+  const candidateStatus = isFinishing
+    ? "Ending"
+    : isSubmitting
+      ? "Submitting"
+      : isListening
+        ? "Recording"
+        : answerWordCount > 0
+          ? "Drafting"
+          : "Ready";
+  const activeBanner = pageError
+    ? { tone: "error", text: pageError }
+    : securityWarning
+      ? { tone: "warning", text: securityWarning }
+      : notice
+        ? { tone: "note", text: notice }
+        : null;
+  const latestSignalMessage =
+    recentFlags[0]?.message || "No live alerts. Stay focused, centered, and answer naturally.";
+  const liveMonitorCards = [
+    {
+      icon: <UserRound size={15} />,
+      label: "Face Detection",
+      value: `${Math.max(detectedFaceCount, 1)}`,
+      hint:
+        faceAlertCount > 0
+          ? "Re-center the frame so only one face stays visible."
+          : "Single face is visible and stable.",
+      tone: faceAlertCount > 0 ? "warning" : "positive",
+    },
+    {
+      icon: <Activity size={15} />,
+      label: "Movement",
+      value: `${movementMetric}`,
+      hint:
+        signalCounts.motionAlerts > 0
+          ? "Movement alerts were raised. Sit a little steadier."
+          : "Body movement looks controlled.",
+      tone: signalCounts.motionAlerts > 0 ? "warning" : "neutral",
+    },
+    {
+      icon: <Clock3 size={15} />,
+      label: "Question Progress",
+      value: `${questionIndex}/${totalQuestionCount}`,
+      hint: "Track how far you are in this mock interview.",
+      tone: "accent",
+    },
+    {
+      icon: <ShieldAlert size={15} />,
+      label: "Security Alerts",
+      value: `${flags.length}`,
+      hint:
+        flags.length > 0
+          ? "Review the latest notice below."
+          : "No active integrity concerns.",
+      tone: flags.length > 0 ? "warning" : "positive",
+    },
+  ];
+
+  const pushFlag = (message, key, wait = 18000, countKey = "") => {
     const now = Date.now();
     if (cooldownRef.current[key] && now - cooldownRef.current[key] < wait) return;
     cooldownRef.current[key] = now;
+
+    if (countKey) {
+      setSignalCounts((previous) => ({
+        ...previous,
+        [countKey]: previous[countKey] + 1,
+      }));
+    }
+
     setFlags((previous) => [
       { id: `${key}-${now}`, message, time: new Date(now).toLocaleTimeString() },
       ...previous,
     ].slice(0, 12));
   };
 
-  const speak = (text) => {
-    if (!window.speechSynthesis || !text?.trim()) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text.trim());
-    utterance.rate = 1;
-    window.speechSynthesis.speak(utterance);
+  const speak = async (text) => {
+    const spoken = await speakText(text, { lang: "en-IN", rate: 1 });
+    if (!spoken && !speechWarningShownRef.current) {
+      speechWarningShownRef.current = true;
+      setNotice(
+        "Interviewer voice playback is unavailable in this browser, but the interview will continue normally.",
+      );
+    }
   };
 
   const stopListening = () => {
@@ -113,39 +264,155 @@ export default function InterviewCore({
     setIsListening(true);
   };
 
-  const buildSummary = async (nextHistory, closingRemark = "", warningMessage = "") => {
+  const buildFallbackResult = (
+    nextHistory = history,
+    fallbackMessage = "Interview ended. Camera and microphone access were released.",
+    serviceUnavailable = false,
+  ) => {
+    const answeredQuestions = nextHistory.length;
+    const improvements = [
+      "Use one specific project example in each answer so your impact is easier to understand.",
+      "Explain why you chose an approach, not only what you built.",
+      "Keep your answers structured with context, action, and result.",
+    ];
+
+    if (signalCounts.noVoiceAlerts > 0) {
+      improvements.unshift(
+        "Speak a little louder and keep a steady pace so the microphone captures your response cleanly.",
+      );
+    }
+
+    if (focusAlertCount > 0) {
+      improvements.unshift(
+        "Stay on the interview tab and avoid shortcut or context-switching activity during the interview.",
+      );
+    }
+
+    const strengths = answeredQuestions
+      ? [
+          answeredQuestions >= initialSession.totalQuestions
+            ? "You stayed with the interview through the planned question set."
+            : "You kept the conversation moving by submitting answers inside the live interview flow.",
+          "You kept the camera and microphone active throughout the captured session.",
+        ]
+      : ["You completed the setup flow and reached the live interview stage."];
+
+    return {
+      summary: answeredQuestions
+        ? serviceUnavailable
+          ? "The interview ended safely, but the detailed AI report was unavailable. Use these improvement pointers to prepare for your next attempt."
+          : "The interview ended before a complete report could be generated, so this summary highlights the clearest next steps."
+        : "The interview ended before enough answers were captured to generate a detailed report. Complete at least one full answer next time to unlock richer feedback.",
+      strengths,
+      improvements: improvements.slice(0, 3),
+      overallScore: null,
+      communicationScore: null,
+      technicalScore: null,
+      confidenceScore: null,
+      integrityNote: flags.length
+        ? `Interview integrity signals were raised ${flags.length} time(s). Review focus changes, camera framing, and movement before your next run.`
+        : "",
+      hiringSignal:
+        answeredQuestions > 0
+          ? "Promising practice signal with room to become more concrete and decisive."
+          : "Too little answer data to form a reliable hiring signal.",
+      communicationSummary:
+        "Communication improves when answers reach the example faster and end with a clear result.",
+      technicalSummary:
+        "Technical strength is easier to see when you explain the why behind your decisions.",
+      confidenceSummary:
+        "Confidence rises when you use ownership language and close with impact.",
+      nextSteps: [
+        "Prepare 3 resume-backed stories with context, action, result, and tradeoff.",
+        "Practice one debugging answer and one design answer aloud.",
+        "Tighten your opening so the real example comes earlier.",
+      ],
+      fallbackUsed: true,
+      message: fallbackMessage,
+      answeredQuestions,
+      totalQuestions: initialSession.totalQuestions,
+      elapsedSeconds,
+      role: initialSession.role,
+      difficulty: initialSession.difficulty,
+      englishLevel: initialSession.englishLevel,
+      history: nextHistory,
+      proctorFlags: flags.map((item) => item.message),
+    };
+  };
+
+  const exitInterview = async (
+    nextHistory = history,
+    fallbackMessage = "Interview ended. Camera and microphone access were released.",
+  ) => {
+    stopListening();
+    cancelSpeech();
+    setIsFinishing(true);
+
+    let resultPayload = buildFallbackResult(nextHistory, fallbackMessage);
+
     try {
-      setIsFinishing(true);
-      const data = await finishMockInterview({
-        history: nextHistory,
-        role: initialSession.role,
-        difficulty: initialSession.difficulty,
-        englishLevel: initialSession.englishLevel,
-        totalQuestions: initialSession.totalQuestions,
-        resumeSummary: initialSession.profile?.resumeSummary || "",
-        resumeSkills: initialSession.profile?.resumeSkills || [],
-        skills: initialSession.profile?.skills || [],
-        proctorFlags: flags.map((item) => item.message),
-      });
+      if (nextHistory.length) {
+        const data = await finishMockInterview({
+          history: nextHistory,
+          role: initialSession.role,
+          difficulty: initialSession.difficulty,
+          englishLevel: initialSession.englishLevel,
+          totalQuestions: initialSession.totalQuestions,
+          resumeSummary: initialSession.profile?.resumeSummary || "",
+          resumeSkills: initialSession.profile?.resumeSkills || [],
+          skills: initialSession.profile?.skills || [],
+          projects: initialSession.profile?.projects || "",
+          experience: initialSession.profile?.experience || "",
+          proctorFlags: flags.map((item) => item.message),
+        });
 
-      setSummary({
-        summary: data?.summary || "",
-        strengths: Array.isArray(data?.strengths) ? data.strengths : [],
-        improvements: Array.isArray(data?.improvements) ? data.improvements : [],
-        overallScore: Number(data?.overallScore ?? 0) || 0,
-        communicationScore: Number(data?.communicationScore ?? 0) || 0,
-        technicalScore: Number(data?.technicalScore ?? 0) || 0,
-        confidenceScore: Number(data?.confidenceScore ?? 0) || 0,
-        integrityNote: data?.integrityNote || "",
-        closingRemark,
-      });
-
-      if (warningMessage || data?.warning) setNotice(warningMessage || data.warning);
-      if (closingRemark) speak(closingRemark);
-    } catch (error) {
-      setPageError(error?.response?.data?.message || "Unable to finish the interview.");
+        resultPayload = {
+          summary: data?.summary || resultPayload.summary,
+          strengths: data?.strengths?.length ? data.strengths : resultPayload.strengths,
+          improvements: data?.improvements?.length
+            ? data.improvements
+            : resultPayload.improvements,
+          overallScore: Number.isFinite(Number(data?.overallScore))
+            ? Number(data.overallScore)
+            : null,
+          communicationScore: Number.isFinite(Number(data?.communicationScore))
+            ? Number(data.communicationScore)
+            : null,
+          technicalScore: Number.isFinite(Number(data?.technicalScore))
+            ? Number(data.technicalScore)
+            : null,
+          confidenceScore: Number.isFinite(Number(data?.confidenceScore))
+            ? Number(data.confidenceScore)
+            : null,
+          integrityNote: data?.integrityNote || resultPayload.integrityNote,
+          hiringSignal: data?.hiringSignal || resultPayload.hiringSignal,
+          communicationSummary:
+            data?.communicationSummary || resultPayload.communicationSummary,
+          technicalSummary:
+            data?.technicalSummary || resultPayload.technicalSummary,
+          confidenceSummary:
+            data?.confidenceSummary || resultPayload.confidenceSummary,
+          nextSteps:
+            Array.isArray(data?.nextSteps) && data.nextSteps.length
+              ? data.nextSteps
+              : resultPayload.nextSteps,
+          fallbackUsed: Boolean(data?.warning),
+          message: data?.warning ? `${fallbackMessage} ${data.warning}` : fallbackMessage,
+          answeredQuestions: nextHistory.length,
+          totalQuestions: initialSession.totalQuestions,
+          elapsedSeconds,
+          role: initialSession.role,
+          difficulty: initialSession.difficulty,
+          englishLevel: initialSession.englishLevel,
+          history: nextHistory,
+          proctorFlags: flags.map((item) => item.message),
+        };
+      }
+    } catch {
+      resultPayload = buildFallbackResult(nextHistory, fallbackMessage, true);
     } finally {
       setIsFinishing(false);
+      onFinish(resultPayload);
     }
   };
 
@@ -159,6 +426,7 @@ export default function InterviewCore({
     try {
       setIsSubmitting(true);
       setPageError("");
+      setNotice("");
       stopListening();
 
       const data = await continueMockInterview({
@@ -173,6 +441,8 @@ export default function InterviewCore({
         resumeSummary: initialSession.profile?.resumeSummary || "",
         resumeSkills: initialSession.profile?.resumeSkills || [],
         skills: initialSession.profile?.skills || [],
+        projects: initialSession.profile?.projects || "",
+        experience: initialSession.profile?.experience || "",
       });
 
       const nextHistory = [
@@ -187,16 +457,24 @@ export default function InterviewCore({
       setHistory(nextHistory);
       setDraftAnswer("");
       setInterviewerReply(data?.interviewerReply || "");
+      setAnswerSignal(data?.answerSignal || "");
+      setCoachingTip(
+        data?.coachingTip ||
+          "Use one concrete example, one clear decision, and one outcome in your next answer.",
+      );
       if (data?.warning) setNotice(data.warning);
 
       if (data?.shouldEnd || !data?.question) {
-        await buildSummary(nextHistory, data?.closingRemark || "", data?.warning || "");
+        await exitInterview(
+          nextHistory,
+          data?.closingRemark || "Interview finished. Camera and microphone access were released.",
+        );
         return;
       }
 
       setCurrentQuestion(data.question);
       setQuestionIndex((previous) => previous + 1);
-      speak(`${data?.interviewerReply || ""} ${data?.question || ""}`);
+      void speak(`${data?.interviewerReply || ""} ${data?.question || ""}`);
     } catch (error) {
       setPageError(error?.response?.data?.message || "Unable to continue the interview.");
     } finally {
@@ -211,44 +489,56 @@ export default function InterviewCore({
   }, [mediaStream]);
 
   useEffect(() => {
-    speak(`${initialSession.opening || ""} ${initialSession.question || ""}`);
+    void speak(`${initialSession.opening || ""} ${initialSession.question || ""}`);
     return () => {
-      window.speechSynthesis?.cancel?.();
+      cancelSpeech();
       stopListening();
     };
   }, [initialSession.opening, initialSession.question]);
 
   useEffect(() => {
-    if (summary) return undefined;
     timerRef.current = window.setInterval(() => {
       setElapsedSeconds((previous) => previous + 1);
     }, 1000);
+
     return () => window.clearInterval(timerRef.current);
-  }, [summary]);
+  }, []);
 
   useEffect(() => {
-    if (summary) return undefined;
-
-    const onHide = () => document.hidden && pushFlag("Interview tab was hidden.", "tab-hide");
-    const onBlur = () => pushFlag("Window focus left the interview screen.", "blur");
-    const onFull = () => !document.fullscreenElement && pushFlag("Fullscreen mode was exited.", "fullscreen");
+    const onHide = () =>
+      document.hidden &&
+      pushFlag("Interview tab was hidden.", "tab-hide", 7000, "focusAlerts");
+    const onBlur = () =>
+      pushFlag("Window focus left the interview screen.", "blur", 7000, "focusAlerts");
     const onBlocked = (event) => {
       event.preventDefault();
-      pushFlag(`${event.type} action was blocked during the interview.`, event.type);
+      pushFlag(
+        `${event.type} action was blocked during the interview.`,
+        event.type,
+        7000,
+        "blockedAlerts",
+      );
     };
     const onKey = (event) => {
       const loweredKey = String(event.key || "").toLowerCase();
       if (
         event.key === "F12" ||
-        ((event.ctrlKey || event.metaKey) && ["c", "v", "x", "t", "w", "n", "i", "j"].includes(loweredKey))
+        event.key === "F5" ||
+        (event.altKey && loweredKey === "arrowleft") ||
+        ((event.ctrlKey || event.metaKey) &&
+          ["c", "v", "x", "t", "w", "n", "i", "j", "r"].includes(loweredKey))
       ) {
         event.preventDefault();
-        pushFlag(`Shortcut ${event.key} was attempted during the interview.`, `shortcut-${loweredKey || "f12"}`);
+        pushFlag(
+          `Shortcut ${event.key} was attempted during the interview.`,
+          `shortcut-${loweredKey || "f12"}`,
+          7000,
+          "blockedAlerts",
+        );
       }
     };
 
     document.addEventListener("visibilitychange", onHide);
-    document.addEventListener("fullscreenchange", onFull);
     document.addEventListener("copy", onBlocked);
     document.addEventListener("paste", onBlocked);
     document.addEventListener("cut", onBlocked);
@@ -258,7 +548,6 @@ export default function InterviewCore({
 
     return () => {
       document.removeEventListener("visibilitychange", onHide);
-      document.removeEventListener("fullscreenchange", onFull);
       document.removeEventListener("copy", onBlocked);
       document.removeEventListener("paste", onBlocked);
       document.removeEventListener("cut", onBlocked);
@@ -266,10 +555,37 @@ export default function InterviewCore({
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("keydown", onKey);
     };
-  }, [summary]);
+  }, []);
 
   useEffect(() => {
-    if (summary || !mediaStream) return undefined;
+    const currentUrl = window.location.href;
+    const onBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const onPopState = () => {
+      window.history.pushState({ mockInterviewLock: true }, "", currentUrl);
+      setPageError("Use End Interview to leave the live interview.");
+      pushFlag(
+        "Browser back navigation was blocked during the interview.",
+        "history-back",
+        7000,
+        "focusAlerts",
+      );
+    };
+
+    window.history.pushState({ mockInterviewLock: true }, "", currentUrl);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("popstate", onPopState);
+
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mediaStream) return undefined;
 
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d", { willReadFrequently: true });
@@ -309,15 +625,33 @@ export default function InterviewCore({
       previousFrame = values;
       setCameraState((previous) => ({ ...previous, brightness, motion }));
 
-      if (brightness < 22) pushFlag("Camera feed looks too dark or obstructed.", "dark-camera", 22000);
-      if (motion > 70) pushFlag("Excessive movement was detected in frame.", "camera-motion", 22000);
+      if (brightness < 22) {
+        pushFlag("Camera feed looks too dark or obstructed.", "dark-camera", 12000);
+      }
+      if (motion > 70) {
+        pushFlag(
+          "Excessive movement was detected in frame.",
+          "camera-motion",
+          5000,
+          "motionAlerts",
+        );
+      }
 
       if (detector) {
         try {
           const faces = await detector.detect(video);
           setCameraState((previous) => ({ ...previous, faceCount: faces.length }));
-          if (faces.length === 0) pushFlag("Face not detected in camera frame.", "no-face", 22000);
-          if (faces.length > 1) pushFlag("Multiple faces detected in camera frame.", "multi-face", 22000);
+          if (faces.length === 0) {
+            pushFlag("Face not detected in camera frame.", "no-face", 7000, "noFaceAlerts");
+          }
+          if (faces.length > 1) {
+            pushFlag(
+              "Multiple faces detected in camera frame.",
+              "multi-face",
+              7000,
+              "multiFaceAlerts",
+            );
+          }
         } catch {
           setCameraState((previous) => ({ ...previous, mode: "basic" }));
         }
@@ -332,206 +666,546 @@ export default function InterviewCore({
       cancelled = true;
       if (monitorRef.current) clearTimeout(monitorRef.current);
     };
-  }, [mediaStream, summary]);
+  }, [mediaStream]);
+
+  useEffect(() => {
+    if (!mediaStream) return undefined;
+
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor || !mediaStream.getAudioTracks().length) return undefined;
+
+    const audioContext = new AudioContextCtor();
+    const analyser = audioContext.createAnalyser();
+    const source = audioContext.createMediaStreamSource(mediaStream);
+    const samples = new Uint8Array(analyser.frequencyBinCount);
+
+    analyser.fftSize = 256;
+    source.connect(analyser);
+
+    audioContextRef.current = audioContext;
+    liveAnalyserRef.current = analyser;
+    liveSourceRef.current = source;
+    silentStreakRef.current = 0;
+
+    audioContext.resume().catch(() => {});
+
+    audioMonitorRef.current = window.setInterval(() => {
+      liveAnalyserRef.current?.getByteFrequencyData(samples);
+      const average =
+        samples.reduce((sum, item) => sum + item, 0) / Math.max(samples.length, 1);
+      const normalizedLevel = average / 255;
+
+      setVoiceLevel(normalizedLevel);
+
+      if (normalizedLevel < 0.018) {
+        silentStreakRef.current += 1;
+        if (silentStreakRef.current >= 8) {
+          pushFlag(
+            "Very low voice activity was detected for a prolonged period.",
+            "no-voice",
+            12000,
+            "noVoiceAlerts",
+          );
+          silentStreakRef.current = 0;
+        }
+      } else {
+        silentStreakRef.current = 0;
+      }
+    }, 1500);
+
+    return () => {
+      if (audioMonitorRef.current) {
+        clearInterval(audioMonitorRef.current);
+      }
+      silentStreakRef.current = 0;
+      liveSourceRef.current?.disconnect?.();
+      liveAnalyserRef.current?.disconnect?.();
+      audioContextRef.current?.close?.().catch(() => {});
+      liveSourceRef.current = null;
+      liveAnalyserRef.current = null;
+      audioContextRef.current = null;
+      setVoiceLevel(0);
+    };
+  }, [mediaStream]);
 
   return (
-    <div className="page-shell">
-      <div className="page-inner max-w-[1440px] space-y-6">
-        <section className="glass-card p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Live Interview</p>
-              <h1 className="section-title">Resume-aware interviewer flow with follow-up questions and integrity tracking.</h1>
-              <p className="text-sm leading-7 text-slate-300">
-                {initialSession.role} · {initialSession.englishLevel} English · {initialSession.difficulty} difficulty · Question {questionIndex} of {initialSession.totalQuestions}
-              </p>
+    <div className="page-shell mock-interview-shell mock-live-shell">
+      <div className="mock-interview-backdrop" aria-hidden="true">
+        <div className="mock-interview-orb mock-interview-orb--a" />
+        <div className="mock-interview-orb mock-interview-orb--b" />
+        <ParticleMesh className="mock-interview-mesh" />
+      </div>
+
+      <div className="page-inner mock-interview-page mock-live-room">
+        <div className="mock-live-room__topbar">
+          <div className="mock-live-room__brand">
+            <div className="mock-live-room__brand-mark">
+              <Activity size={13} />
             </div>
-            <div className="flex flex-wrap gap-3">
-              <span className="badge">{formatDuration(elapsedSeconds)}</span>
-              <span className="badge">{flags.length} signal{flags.length === 1 ? "" : "s"}</span>
-              <button type="button" onClick={() => speak(`${interviewerReply} ${currentQuestion}`)} className="btn-ghost">
-                <Volume2 size={16} />
-                Replay
-              </button>
+            <div className="mock-live-room__brand-copy">
+              <strong>Mock Interview Room</strong>
+              <span>live practice environment</span>
             </div>
           </div>
-          {pageError ? <p className="mt-4 rounded-2xl border border-rose-400/35 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">{pageError}</p> : null}
-          {notice ? <p className="mt-4 rounded-2xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">{notice}</p> : null}
-        </section>
-        <section className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-          <aside className="space-y-6">
-            <section className="glass-card p-5">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Camera</p>
-              <h2 className="mt-1 font-['Sora'] text-lg font-semibold text-slate-50">Live preview</h2>
-              <div className="mt-4 overflow-hidden rounded-[24px] border border-white/10 bg-slate-950/40">
-                <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full bg-slate-950 object-cover" />
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[18px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-                  Brightness: <span className="font-semibold text-slate-100">{cameraState.brightness}</span>
-                </div>
-                <div className="rounded-[18px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-                  Motion: <span className="font-semibold text-slate-100">{cameraState.motion}</span>
-                </div>
-              </div>
-              {cameraState.mode === "face" ? (
-                <div className="mt-3 rounded-[18px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-                  Face count detected: <span className="font-semibold text-slate-100">{cameraState.faceCount ?? 0}</span>
-                </div>
-              ) : null}
-            </section>
 
-            <section className="glass-card p-5">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Integrity Log</p>
-              <h2 className="mt-1 font-['Sora'] text-lg font-semibold text-slate-50">Proctoring signals</h2>
-              <div className="mt-4 space-y-3">
-                {flags.length ? flags.map((item) => (
-                  <div key={item.id} className="rounded-[18px] border border-amber-300/20 bg-amber-400/8 px-4 py-3">
-                    <div className="flex items-start gap-3">
-                      <ShieldAlert size={16} className="mt-1 text-amber-200" />
-                      <div>
-                        <p className="text-sm text-amber-50">{item.message}</p>
-                        <p className="mt-1 text-xs text-amber-100/70">{item.time}</p>
-                      </div>
-                    </div>
-                  </div>
-                )) : (
-                  <div className="rounded-[18px] border border-emerald-300/20 bg-emerald-400/10 px-4 py-4 text-sm leading-7 text-emerald-50">
-                    No integrity signals yet. Stay in fullscreen, keep your face visible, and continue naturally.
-                  </div>
-                )}
-              </div>
-            </section>
-          </aside>
+          <div className="mock-live-room__topbar-group">
+            <span className="mock-chip">Live interview</span>
+            <span className="mock-chip">Q {questionIndex}/{totalQuestionCount}</span>
+            <span className="mock-chip">{formatLabel(initialSession.difficulty)}</span>
+            <span className="mock-chip">{formatLabel(initialSession.englishLevel)} English</span>
+            <span className="mock-chip">
+              <Clock3 size={14} />
+              {formatDuration(elapsedSeconds)}
+            </span>
+            <span className="mock-chip">
+              {recognitionSupported ? candidateMode : "Typing fallback"}
+            </span>
+            <span className="mock-chip">Focus monitored</span>
+          </div>
+        </div>
 
-          <div className="space-y-6">
-            <section className="glass-card p-6">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Interviewer</p>
-              <div className="mt-4 rounded-[20px] border border-white/10 bg-white/5 p-4 text-sm leading-7 text-slate-100">
-                {interviewerReply || "The interviewer reply will appear here."}
-              </div>
-              <div className="mt-4 rounded-[22px] border border-cyan-300/20 bg-cyan-400/8 p-5">
-                <p className="text-xs uppercase tracking-[0.16em] text-cyan-100/80">Current Question</p>
-                <h2 className="mt-3 font-['Sora'] text-2xl font-semibold leading-tight text-cyan-50">{currentQuestion}</h2>
-              </div>
+        <AnimatePresence initial={false}>
+          {activeBanner ? (
+            <motion.p
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className={`mock-feedback-message is-${activeBanner.tone} mock-live-room__banner`}
+            >
+              {activeBanner.text}
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
 
-              {!summary ? (
-                <div className="mt-4 rounded-[22px] border border-white/10 bg-slate-950/25 p-5">
-                  <label className="block">
-                    <span className="input-label">Your Answer</span>
-                    <textarea
-                      value={draftAnswer}
-                      onChange={(event) => setDraftAnswer(event.target.value)}
-                      rows={10}
-                      className="textarea min-h-[220px] resize-y"
-                      placeholder="Speak or type your answer here..."
-                    />
-                  </label>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <button type="button" onClick={isListening ? stopListening : startListening} className="btn-secondary">
-                      {isListening ? <><MicOff size={16} />Stop Voice Input</> : <><Mic size={16} />Start Voice Input</>}
-                    </button>
-                    <button type="button" onClick={submitAnswer} disabled={isSubmitting || isFinishing} className="btn-primary">
-                      {isSubmitting ? <><Loader2 size={16} className="animate-spin" />Next Question...</> : <><Send size={16} />Submit Answer</>}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => history.length && buildSummary(history, "Thanks, we will stop here and move to your interview summary.")}
-                      disabled={!history.length || isSubmitting || isFinishing}
-                      className="btn-ghost"
-                    >
-                      {isFinishing ? <><Loader2 size={16} className="animate-spin" />Finishing...</> : "End Interview"}
-                    </button>
-                  </div>
+        <section className="mock-live-room__grid">
+          <motion.article
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="mock-surface mock-live-room__stage"
+          >
+            <div className="mock-live-room__section-head">
+              <div className="mock-live-room__section-title-wrap">
+                <div className="mock-live-room__section-icon">
+                  <UserRound size={18} />
                 </div>
-              ) : null}
-            </section>
-
-            <section className="glass-card p-6">
-              <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Transcript</p>
-                  <h2 className="mt-1 font-['Sora'] text-lg font-semibold text-slate-50">Answered questions</h2>
+                  <p className="mock-section-kicker">Interviewer Stage</p>
+                  <h1 className="mock-live-room__section-title">AI Interviewer</h1>
+                  {/* <p className="mock-live-room__section-copy">
+                    Listen to the prompt, understand the follow-up, then craft a clear and
+                    structured response.
+                  </p> */}
                 </div>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">{history.length} answered</span>
               </div>
-              <div className="mt-4 space-y-4">
-                {history.length ? history.map((item, index) => (
-                  <div key={`${item.question}-${index}`} className="rounded-[22px] border border-white/10 bg-white/5 p-5">
-                    <span className="badge">Question {index + 1}</span>
-                    <p className="mt-4 text-sm font-semibold leading-7 text-slate-100">{item.question}</p>
-                    <p className="mt-3 text-sm leading-7 text-slate-300">{item.answer}</p>
-                    {item.interviewerReply ? (
-                      <div className="mt-4 rounded-[18px] border border-white/10 bg-slate-950/25 p-4 text-sm leading-7 text-slate-200">
-                        {item.interviewerReply}
-                      </div>
-                    ) : null}
+              <span className="mock-live-room__role-badge is-host">Host</span>
+            </div>
+
+            <div className="mock-live-room__stage-canvas">
+              <div className="mock-live-room__host-console" aria-hidden="true">
+                <div className="mock-live-room__host-orb">
+                  <span className="mock-live-room__host-ring is-outer" />
+                  <span className="mock-live-room__host-ring is-inner" />
+                  <div className="mock-live-room__host-core">IRA</div>
+                </div>
+
+                <div className="mock-live-room__host-copy">
+                  <span className="mock-live-room__host-label">AI Host</span>
+                  <strong>Resume-aware interviewer</strong>
+                  <p>Prompting questions in a guided, role-focused sequence.</p>
+                </div>
+
+                <div className="mock-live-room__host-wave">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+
+              <div className="mock-live-room__prompt-stack">
+                {/* <div className="mock-live-room__reply-card">
+                  <span className="mock-live-room__eyebrow">Interviewer cue</span>
+                  <p>{interviewerReply || "The interviewer response will appear here."}</p>
+                </div> */}
+
+                {/* {answerSignal || coachingTip ? (
+                  <div className="mock-live-room__reply-card">
+                    <span className="mock-live-room__eyebrow">Live coaching</span>
+                    <p>{answerSignal || "Your last answer is being assessed for clarity and depth."}</p>
+                    <p>{coachingTip}</p>
                   </div>
-                )) : (
-                  <div className="rounded-[22px] border border-dashed border-white/14 bg-white/4 px-6 py-10 text-sm leading-7 text-slate-400">
-                    Your question-and-answer history will appear here after each submitted response.
+                ) : null} */}
+
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={`${questionIndex}-${currentQuestion}`}
+                    initial={{ opacity: 0, y: 18 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -14 }}
+                    transition={{ duration: 0.28, ease: "easeOut" }}
+                    className="mock-live-room__question-card"
+                  >
+                    <div className="mock-live-room__question-head">
+                      <span className="mock-live-room__eyebrow">Current question</span>
+                      <span className="mock-live-room__question-step">
+                        Question {questionIndex}
+                      </span>
+                    </div>
+                    <h2 className="mock-live-room__question-title">
+                      {currentQuestion || "Waiting for the next question."}
+                    </h2>
+                  </motion.div>
+                </AnimatePresence>
+
+                {/* <div className="mock-live-room__prompt-meta">
+                  <div className="mock-live-room__mini-stat">
+                    <span>Status</span>
+                    <strong>{interviewerStatus}</strong>
+                  </div>
+                  <div className="mock-live-room__mini-stat">
+                    <span>Session</span>
+                    <strong>
+                      {formatLabel(initialSession.difficulty)} ·{" "}
+                      {formatLabel(initialSession.englishLevel)}
+                    </strong>
+                  </div>
+                  <div className="mock-live-room__mini-stat">
+                    <span>Next step</span>
+                    <strong>Listen, think, answer</strong>
+                  </div>
+                  {initialSession?.focusAreas?.length ? (
+                    <div className="mock-live-room__mini-stat">
+                      <span>Interview focus</span>
+                      <strong>{initialSession.focusAreas.slice(0, 2).join(" · ")}</strong>
+                    </div>
+                  ) : null}
+                </div> */}
+
+                {/* {initialSession?.candidateBrief ? (
+                  <div className="mock-live-room__reply-card">
+                    <span className="mock-live-room__eyebrow">What this session is testing</span>
+                    <p>{initialSession.candidateBrief}</p>
+                  </div>
+                ) : null} */}
+              </div>
+            </div>
+
+            <div className="mock-live-room__stage-actions">
+              <motion.button
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.985 }}
+                type="button"
+                onClick={() => void speak(`${interviewerReply} ${currentQuestion}`)}
+                className="mock-live-room__control"
+              >
+                <Volume2 size={16} />
+                Replay Prompt
+              </motion.button>
+
+              <div className="mock-live-room__control is-muted mock-live-room__status-indicator">
+                <motion.span
+                  animate={{ opacity: [0.45, 1, 0.45], scale: [1, 1.35, 1] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                  className="mock-live-room__pulse-dot"
+                />
+                {interviewerStatus}
+              </div>
+            </div>
+          </motion.article>
+
+          <motion.article
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut", delay: 0.05 }}
+            className="mock-surface mock-live-room__workspace"
+          >
+            <div className="mock-live-room__section-head">
+              <div className="mock-live-room__section-title-wrap">
+                <div className="mock-live-room__section-icon">
+                  <Mic size={18} />
+                </div>
+                <div>
+                  <p className="mock-section-kicker">Response Console</p>
+                  <h1 className="mock-live-room__section-title">Answer Workspace</h1>
+                  {/* <p className="mock-live-room__section-copy">
+                    Draft, refine, and submit your response without losing sight of the live
+                    interview flow.
+                  </p> */}
+                </div>
+              </div>
+              <span className="mock-live-room__role-badge">Answering</span>
+            </div>
+
+            <div className="mock-live-room__workspace-stats">
+              <div className="mock-live-room__workspace-stat">
+                <span className="mock-live-room__workspace-stat-icon">
+                  <Clock3 size={22} />
+                </span>
+                <span>Progress</span>
+                <strong>
+                  {questionIndex}/{totalQuestionCount}
+                </strong>
+                <p>{questionProgressPercent}% through this session</p>
+              </div>
+              <div className="mock-live-room__workspace-stat">
+                <span className="mock-live-room__workspace-stat-icon">
+                  <FileText size={22} />
+                </span>
+                <span>Draft</span>
+                <strong>{answerWordCount} words</strong>
+                <p>{candidateStatus}</p>
+              </div>
+              <div className="mock-live-room__workspace-stat">
+                <span className="mock-live-room__workspace-stat-icon">
+                  <Mic size={22} />
+                </span>
+                <span>Input</span>
+                <strong>{recognitionSupported ? candidateMode : "Typing only"}</strong>
+                <p>Mic level {voiceMeterPercent}%</p>
+              </div>
+            </div>
+
+            <label className="mock-live-room__composer">
+              <div className="mock-live-room__composer-head">
+                <span className="mock-field-label">Answer Draft</span>
+                <span className="mock-live-room__composer-mode">{candidateStatus}</span>
+              </div>
+              <textarea
+                value={draftAnswer}
+                onChange={(event) => setDraftAnswer(event.target.value)}
+                rows={7}
+                className="textarea mock-answer-input mock-live-room__answer-input"
+                placeholder="Speak or type your answer here..."
+              />
+            </label>
+
+            {/* <p className="mock-live-room__workspace-note">{answerGuidance}</p> */}
+
+            {/* <div className="mock-live-room__answer-rail">
+              <div className="mock-live-room__answer-rail-item">
+                <span className="mock-live-room__answer-rail-icon">
+                  <FileText size={14} />
+                </span>
+                <span>Context</span>
+              </div>
+              <div className="mock-live-room__answer-rail-item">
+                <span className="mock-live-room__answer-rail-icon">
+                  <ArrowRight size={14} />
+                </span>
+                <span>Action</span>
+              </div>
+              <div className="mock-live-room__answer-rail-item">
+                <span className="mock-live-room__answer-rail-icon">
+                  <Target size={14} />
+                </span>
+                <span>Impact</span>
+              </div>
+            </div> */}
+
+            {/* <div className="mock-live-room__compose-meta">
+              <span>{answerWordCount} words drafted</span>
+              <span>
+                {recognitionSupported ? candidateMode : "Voice typing unavailable"}
+              </span>
+            </div> */}
+
+            <div className="mock-live-room__control-row">
+              <motion.button
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.985 }}
+                type="button"
+                onClick={isListening ? stopListening : startListening}
+                className={`mock-live-room__control${isListening ? " is-recording" : ""}`}
+              >
+                {isListening ? (
+                  <>
+                    <MicOff size={16} />
+                    Stop Recording
+                  </>
+                ) : (
+                  <>
+                    <Mic size={16} />
+                    Record Answer
+                  </>
+                )}
+              </motion.button>
+
+              <motion.button
+                whileHover={{ y: canSubmitAnswer ? -2 : 0 }}
+                whileTap={{ scale: canSubmitAnswer ? 0.985 : 1 }}
+                type="button"
+                onClick={submitAnswer}
+                disabled={!canSubmitAnswer}
+                className="mock-live-room__control is-primary"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} />
+                    Submit Answer
+                  </>
+                )}
+              </motion.button>
+            </div>
+
+          </motion.article>
+
+          <motion.article
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut", delay: 0.1 }}
+            className="mock-surface mock-live-room__studio"
+          >
+            <div className="mock-live-room__section-head">
+              <div className="mock-live-room__section-title-wrap">
+                <div className="mock-live-room__section-icon">
+                  <Video size={18} />
+                </div>
+                <div>
+                  <p className="mock-section-kicker">Candidate Studio</p>
+                  <h1 className="mock-live-room__section-title">{candidateLabel}</h1>
+                  {/* <p className="mock-live-room__section-copy">
+                    Keep your framing clean, watch your audio level, and stay aware of any live
+                    monitoring signals.
+                  </p> */}
+                </div>
+              </div>
+              <span className="mock-live-room__role-badge">Candidate</span>
+            </div>
+
+            <div className="mock-live-room__studio-frame">
+              <video ref={videoRef} autoPlay muted playsInline className="mock-stage-video" />
+
+              <div className="mock-live-room__video-topbar">
+                <span className="mock-live-room__presence">
+                  <span className="mock-live-room__presence-dot" />
+                  Camera live
+                </span>
+                <span className="mock-live-room__video-badge">
+                  {recognitionSupported ? candidateMode : "Typing mode"}
+                </span>
+              </div>
+
+              <div className="mock-live-room__video-overlay">
+                <div className="mock-live-room__video-identity">
+                  <span className="mock-live-room__video-name">{candidateLabel}</span>
+                  <span className="mock-live-room__video-caption">Live interview feed</span>
+                </div>
+
+                <div className="mock-live-room__meter-card">
+                  <div className="mock-live-room__meter-head">
+                    <span>Mic level</span>
+                    <strong>{voiceMeterPercent}%</strong>
+                  </div>
+                  <div className="mock-live-room__meter-track">
+                    <motion.div
+                      animate={{ width: `${voiceMeterPercent}%` }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                      className="mock-live-room__meter-fill"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mock-live-room__monitor-grid">
+              {liveMonitorCards.map((card) => (
+                <div key={card.label} className={`mock-live-room__monitor-card is-${card.tone}`}>
+                  <div className="mock-live-room__monitor-card-head">
+                    <span className="mock-live-room__monitor-card-icon">{card.icon}</span>
+                    <span>{card.label}</span>
+                  </div>
+                  <strong>{card.value}</strong>
+                  {/* <p>{card.hint}</p> */}
+                </div>
+              ))}
+            </div>
+
+            <div className="mock-live-room__signal-feed">
+              <div className="mock-live-room__signal-feed-head">
+                <strong>Live integrity feed</strong>
+                <span>{flags.length ? `${flags.length} alert(s)` : "Clean session"}</span>
+              </div>
+
+              <div className="mock-live-room__signal-list">
+                {recentFlags.length ? (
+                  recentFlags.map((flag) => (
+                    <div key={flag.id} className="mock-live-room__signal-item">
+                      <div className="mock-live-room__signal-item-mark">
+                        <ShieldAlert size={14} />
+                      </div>
+                      <div>
+                        <p>{flag.message}</p>
+                        <span>{flag.time}</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="mock-live-room__signal-item is-clean">
+                    <div className="mock-live-room__signal-item-mark">
+                      <Activity size={14} />
+                    </div>
+                    <div>
+                      <p>{latestSignalMessage}</p>
+                      <span>Live monitoring active</span>
+                    </div>
                   </div>
                 )}
               </div>
-            </section>
-
-            {summary ? (
-              <section className="glass-card p-6">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Interview Summary</p>
-                    <h2 className="mt-1 font-['Sora'] text-2xl font-semibold text-slate-50">Debrief and scoring</h2>
-                  </div>
-                  <button type="button" onClick={onRestart} className="btn-secondary">
-                    <RotateCcw size={16} />
-                    Back To Setup
-                  </button>
-                </div>
-
-                {summary.closingRemark ? (
-                  <div className="mt-5 rounded-[20px] border border-cyan-300/20 bg-cyan-400/10 p-4 text-sm leading-7 text-cyan-50">
-                    {summary.closingRemark}
-                  </div>
-                ) : null}
-
-                <div className="mt-5 rounded-[22px] border border-white/10 bg-white/5 p-5 text-sm leading-7 text-slate-100">
-                  {summary.summary}
-                  {summary.integrityNote ? (
-                    <p className="mt-4 rounded-[18px] border border-amber-300/20 bg-amber-400/8 px-4 py-3 text-sm text-amber-50">
-                      {summary.integrityNote}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="mt-5 grid gap-4 xl:grid-cols-4">
-                  <div className="rounded-[18px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Overall: <span className="font-semibold text-slate-100">{summary.overallScore}/100</span></div>
-                  <div className="rounded-[18px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Communication: <span className="font-semibold text-slate-100">{summary.communicationScore}/100</span></div>
-                  <div className="rounded-[18px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Technical: <span className="font-semibold text-slate-100">{summary.technicalScore}/100</span></div>
-                  <div className="rounded-[18px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Confidence: <span className="font-semibold text-slate-100">{summary.confidenceScore}/100</span></div>
-                </div>
-
-                <div className="mt-5 grid gap-4 xl:grid-cols-2">
-                  <div className="rounded-[22px] border border-emerald-300/20 bg-emerald-400/8 p-5">
-                    <p className="text-sm font-semibold text-emerald-50">Strengths</p>
-                    <div className="mt-4 space-y-3">
-                      {(summary.strengths || []).map((item) => (
-                        <div key={item} className="rounded-[18px] border border-white/10 bg-slate-950/25 px-4 py-3 text-sm leading-7 text-slate-100">{item}</div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-[22px] border border-rose-300/20 bg-rose-400/8 p-5">
-                    <p className="text-sm font-semibold text-rose-50">Improvements</p>
-                    <div className="mt-4 space-y-3">
-                      {(summary.improvements || []).map((item) => (
-                        <div key={item} className="rounded-[18px] border border-white/10 bg-slate-950/25 px-4 py-3 text-sm leading-7 text-slate-100">{item}</div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </section>
-            ) : null}
-          </div>
+            </div>
+          </motion.article>
         </section>
+
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: "easeOut", delay: 0.1 }}
+          className="mock-live-room__footer"
+        >
+          <div className="mock-live-room__footer-metrics">
+            <span className="mock-chip">
+              <Clock3 size={14} />
+              {formatDuration(elapsedSeconds)}
+            </span>
+            <span className="mock-chip">
+              <Activity size={14} />
+              {answerWordCount} words
+            </span>
+            <span className="mock-chip">
+              <ShieldAlert size={14} />
+              Alerts {flags.length}
+            </span>
+            <span className="mock-chip mock-chip--wide" title={recentFlags[0]?.message || ""}>
+              {recentFlags[0] ? recentFlags[0].message : "No live alerts"}
+            </span>
+          </div>
+
+          <motion.button
+            whileHover={{ y: isSubmitting || isFinishing ? 0 : -2 }}
+            whileTap={{ scale: isSubmitting || isFinishing ? 1 : 0.985 }}
+            type="button"
+            onClick={() => void exitInterview()}
+            disabled={isSubmitting || isFinishing}
+            className="mock-live-room__end"
+          >
+            {isFinishing ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Ending Interview...
+              </>
+            ) : (
+              "End Interview"
+            )}
+          </motion.button>
+        </motion.div>
+
       </div>
     </div>
   );

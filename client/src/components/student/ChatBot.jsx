@@ -1,24 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   ArrowRight,
-  Briefcase,
-  ExternalLink,
   Loader2,
   MessageCircle,
-  Mic,
-  MicOff,
   Minus,
   Sparkles,
-  Target,
-  ThumbsDown,
-  ThumbsUp,
-  Volume2,
-  VolumeX,
 } from "lucide-react";
 
 import { askPlacementAssistant } from "../../services/chatbotApi.jsx";
-import { applyToJob, getStudentJobs } from "../../services/jobApi.jsx";
+import { getStudentJobs } from "../../services/jobApi.jsx";
 import { readChatbotContext } from "../../utils/chatbotContext.js";
 
 
@@ -26,10 +16,6 @@ const STARTER_ACTIONS = [
   {
     label: "Review my resume gaps",
     prompt: "What are the biggest gaps in my resume for the selected job?",
-  },
-  {
-    label: "Recommend jobs for my profile",
-    prompt: "Recommend the best jobs for my current profile.",
   },
   {
     label: "I want software developer skills",
@@ -74,7 +60,7 @@ const STARTER_ACTIONS = [
 ];
 
 const INVALID_SCOPE_COPY =
-  "Sorry, I can only answer questions related to placements, resumes, jobs, skills, and interviews.";
+  "Please ask a meaningful and relevant placement-related question. I can help with resumes, skills, jobs, applications, and interview preparation.";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -88,62 +74,134 @@ const createMessage = (role, content = "", extra = {}) => ({
 const normalizeSpeechTranscript = (value = "") =>
   String(value).replace(/\s+/g, " ").trim();
 
-const getSpeechRecognitionConstructor = () => {
-  if (typeof window === "undefined") {
-    return null;
-  }
+const PLACEMENT_KEYWORDS = new Set([
+  "placement",
+  "placements",
+  "resume",
+  "resumes",
+  "cv",
+  "job",
+  "jobs",
+  "career",
+  "careers",
+  "role",
+  "roles",
+  "skill",
+  "skills",
+  "interview",
+  "interviews",
+  "interviewer",
+  "interviewers",
+  "ats",
+  "application",
+  "applications",
+  "apply",
+  "applying",
+  "eligibility",
+  "shortlist",
+  "shortlisted",
+  "screening",
+  "assessment",
+  "test",
+  "tests",
+  "aptitude",
+  "coding",
+  "technical",
+  "hr",
+  "project",
+  "projects",
+  "internship",
+  "internships",
+  "campus",
+  "recruiter",
+  "recruiters",
+  "offer",
+  "offers",
+  "salary",
+  "package",
+  "ctc",
+  "roadmap",
+  "study",
+  "prepare",
+  "preparation",
+  "learning",
+  "frontend",
+  "backend",
+  "developer",
+  "development",
+  "fullstack",
+  "dsa",
+  "linkedin",
+  "portfolio",
+]);
 
-  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+const PLACEMENT_PHRASES = [
+  "tell me about yourself",
+  "self introduction",
+  "introduce myself",
+  "cover letter",
+  "mock interview",
+  "placement preparation",
+  "campus placement",
+  "hr round",
+  "technical round",
+  "interview preparation",
+  "resume summary",
+  "resume gap",
+  "ats score",
+  "job description",
+  "missing skills",
+];
+
+const extractNormalizedTokens = (value = "") =>
+  normalizeSpeechTranscript(value)
+    .toLowerCase()
+    .split(/[^a-z0-9+#.]+/)
+    .filter((token) => token.length >= 2);
+
+const buildPlacementContextKeywords = ({
+  activeJobSnapshot = null,
+  resumeAnalysis = null,
+} = {}) => {
+  const contextValues = [
+    activeJobSnapshot?.jobTitle,
+    activeJobSnapshot?.company,
+    activeJobSnapshot?.description,
+    ...(Array.isArray(activeJobSnapshot?.skills)
+      ? activeJobSnapshot.skills
+      : []),
+    ...(Array.isArray(resumeAnalysis?.resumeSkills)
+      ? resumeAnalysis.resumeSkills
+      : []),
+    ...(Array.isArray(resumeAnalysis?.resume_skills)
+      ? resumeAnalysis.resume_skills
+      : []),
+  ];
+
+  return new Set(
+    contextValues.flatMap((value) =>
+      extractNormalizedTokens(value).filter((token) => token.length >= 3),
+    ),
+  );
 };
 
-const hasSpeechSynthesisSupport = () =>
-  typeof window !== "undefined" && "speechSynthesis" in window;
-
-const resolveInternalJobStatus = (item, isApplying = false) => {
-  if (item?.has_applied) {
-    return {
-      label: item?.application_status
-        ? `Applied: ${item.application_status}`
-        : "Applied",
-      tone: "success",
-      actionLabel: "Applied",
-      disabled: true,
-    };
+const isPlacementRelevantQuestion = (question, context = {}) => {
+  const normalizedQuestion = normalizeSpeechTranscript(question).toLowerCase();
+  if (!normalizedQuestion) {
+    return false;
   }
 
-  if (item?.applications_closed) {
-    return {
-      label: "Closed",
-      tone: "warn",
-      actionLabel: "Applications Closed",
-      disabled: true,
-    };
+  if (PLACEMENT_PHRASES.some((phrase) => normalizedQuestion.includes(phrase))) {
+    return true;
   }
 
-  if (isApplying) {
-    return {
-      label: "Applying",
-      tone: "info",
-      actionLabel: "Applying...",
-      disabled: true,
-    };
+  const questionTokens = extractNormalizedTokens(normalizedQuestion);
+  if (questionTokens.some((token) => PLACEMENT_KEYWORDS.has(token))) {
+    return true;
   }
 
-  if (item?.can_apply) {
-    return {
-      label: "Can Apply",
-      tone: "info",
-      actionLabel: "Apply Now",
-      disabled: false,
-    };
-  }
-
-  return {
-    label: item?.is_invited === false ? "Invite Required" : "View Only",
-    tone: "neutral",
-    actionLabel: "Not Allowed",
-    disabled: true,
-  };
+  const contextKeywords = buildPlacementContextKeywords(context);
+  return questionTokens.some((token) => contextKeywords.has(token));
 };
 
 const buildActiveJobSnapshot = (job) => {
@@ -174,12 +232,25 @@ const normalizeHistory = (messages) =>
       content: message.content,
     }));
 
+const normalizeStructuredList = (value, limit = 4) =>
+  Array.isArray(value)
+    ? value
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+        .slice(0, limit)
+    : [];
+
+const normalizeChatSections = (value) =>
+  (Array.isArray(value) ? value : [])
+    .map((item) => ({
+      title: String(item?.title || "").trim(),
+      items: normalizeStructuredList(item?.items, 4),
+    }))
+    .filter((item) => item.title && item.items.length)
+    .slice(0, 3);
+
 const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
   const storedContextRef = useRef(readChatbotContext());
-  const recognitionRef = useRef(null);
-  const spokenTranscriptRef = useRef("");
-  const inputDraftRef = useRef("");
-  const sendMessageRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [jobsLoading, setJobsLoading] = useState(false);
@@ -191,16 +262,6 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
   const [thinking, setThinking] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [warning, setWarning] = useState("");
-  const [jobActionStatus, setJobActionStatus] = useState({
-    type: "",
-    message: "",
-  });
-  const [voiceStatus, setVoiceStatus] = useState("");
-  const [listening, setListening] = useState(false);
-  const [voiceInputSupported, setVoiceInputSupported] = useState(false);
-  const [voiceRepliesSupported, setVoiceRepliesSupported] = useState(false);
-  const [voiceRepliesEnabled, setVoiceRepliesEnabled] = useState(false);
-  const [applyingJobId, setApplyingJobId] = useState("");
 
   const bottomRef = useRef(null);
 
@@ -210,57 +271,10 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
     storedContextRef.current?.activeJobSnapshot || null;
 
   useEffect(() => {
-    inputDraftRef.current = input;
-  }, [input]);
-
-  useEffect(() => {
-    const speechRecognition = getSpeechRecognitionConstructor();
-    const speechPlayback = hasSpeechSynthesisSupport();
-
-    setVoiceInputSupported(Boolean(speechRecognition));
-    setVoiceRepliesSupported(speechPlayback);
-    setVoiceRepliesEnabled(speechPlayback);
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.onend = null;
-        recognitionRef.current.onerror = null;
-        recognitionRef.current.onresult = null;
-        recognitionRef.current.abort();
-        recognitionRef.current = null;
-      }
-
-      if (speechPlayback) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     if (selectedJobId) {
       setFocusJobId(selectedJobId);
     }
   }, [selectedJobId]);
-
-  useEffect(() => {
-    if (open) {
-      return;
-    }
-
-    if (recognitionRef.current) {
-      recognitionRef.current.onend = null;
-      recognitionRef.current.onerror = null;
-      recognitionRef.current.onresult = null;
-      recognitionRef.current.abort();
-      recognitionRef.current = null;
-    }
-
-    setListening(false);
-
-    if (hasSpeechSynthesisSupport()) {
-      window.speechSynthesis.cancel();
-    }
-  }, [open]);
 
   useEffect(() => {
     if (!open || jobsLoading || jobs.length > 0) {
@@ -319,244 +333,6 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
     return null;
   }, [focusedJob, focusJobId, storedActiveJobSnapshot]);
 
-  const statusFlags = {
-    resumeAware: Boolean(
-      effectiveResumeAnalysis?.resumeSkills?.length ||
-        effectiveResumeAnalysis?.resume_skills?.length,
-    ),
-    jobAware: Boolean(focusJobId || effectiveActiveJobSnapshot?.jobTitle),
-  };
-
-  const stopSpeechPlayback = () => {
-    if (hasSpeechSynthesisSupport()) {
-      window.speechSynthesis.cancel();
-    }
-  };
-
-  const speakAssistantReply = (text) => {
-    if (!voiceRepliesEnabled || !voiceRepliesSupported) {
-      return;
-    }
-
-    const message = normalizeSpeechTranscript(text);
-    if (!message) {
-      return;
-    }
-
-    stopSpeechPlayback();
-
-    const utterance = new SpeechSynthesisUtterance(message);
-    utterance.lang = "en-IN";
-    utterance.rate = 1;
-    utterance.pitch = 1;
-
-    const availableVoices = window.speechSynthesis.getVoices();
-    const preferredVoice =
-      availableVoices.find((voice) =>
-        String(voice.lang || "").toLowerCase().startsWith("en-in"),
-      ) ||
-      availableVoices.find((voice) =>
-        String(voice.lang || "").toLowerCase().startsWith("en"),
-      );
-
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
-    }
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const updateRecommendedJobState = (jobId, updates = {}) => {
-    setMessages((prev) =>
-      prev.map((message) => {
-        if (!Array.isArray(message.recommendedJobs) || !message.recommendedJobs.length) {
-          return message;
-        }
-
-        const hasTargetJob = message.recommendedJobs.some(
-          (job) => job.job_id === jobId,
-        );
-
-        if (!hasTargetJob) {
-          return message;
-        }
-
-        return {
-          ...message,
-          recommendedJobs: message.recommendedJobs.map((job) =>
-            job.job_id === jobId ? { ...job, ...updates } : job,
-          ),
-        };
-      }),
-    );
-
-    setJobs((prev) =>
-      prev.map((job) =>
-        job._id === jobId
-          ? {
-              ...job,
-              hasApplied: updates.has_applied ?? job.hasApplied,
-              canApply: updates.can_apply ?? job.canApply,
-              applicationsClosed:
-                updates.applications_closed ?? job.applicationsClosed,
-            }
-          : job,
-      ),
-    );
-  };
-
-  const handleApplyRecommendation = async (job) => {
-    if (!job?.job_id) {
-      return;
-    }
-
-    setApplyingJobId(job.job_id);
-    setJobActionStatus({ type: "", message: "" });
-
-    try {
-      const response = await applyToJob(job.job_id);
-      const applicationStatus =
-        response?.data?.application?.status || "applied";
-
-      updateRecommendedJobState(job.job_id, {
-        has_applied: true,
-        can_apply: false,
-        application_status: applicationStatus,
-      });
-
-      setJobActionStatus({
-        type: "success",
-        message: `Applied to ${job.job_title} successfully.`,
-      });
-    } catch (error) {
-      setJobActionStatus({
-        type: "error",
-        message:
-          error?.response?.data?.message ||
-          `Failed to apply to ${job?.job_title || "this job"}.`,
-      });
-    } finally {
-      setApplyingJobId("");
-    }
-  };
-
-  const startVoiceCapture = () => {
-    if (thinking || streaming) {
-      return;
-    }
-
-    const SpeechRecognition = getSpeechRecognitionConstructor();
-    if (!SpeechRecognition) {
-      setVoiceStatus("Voice input is not supported in this browser.");
-      return;
-    }
-
-    stopSpeechPlayback();
-
-    if (recognitionRef.current) {
-      recognitionRef.current.onend = null;
-      recognitionRef.current.onerror = null;
-      recognitionRef.current.onresult = null;
-      recognitionRef.current.abort();
-      recognitionRef.current = null;
-    }
-
-    spokenTranscriptRef.current = "";
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-IN";
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setListening(true);
-      setVoiceStatus("Listening... speak your question.");
-    };
-
-    recognition.onresult = (event) => {
-      let finalTranscript = "";
-      let interimTranscript = "";
-
-      for (let index = 0; index < event.results.length; index += 1) {
-        const transcript = normalizeSpeechTranscript(
-          event.results[index]?.[0]?.transcript || "",
-        );
-
-        if (!transcript) {
-          continue;
-        }
-
-        if (event.results[index].isFinal) {
-          finalTranscript = normalizeSpeechTranscript(
-            `${finalTranscript} ${transcript}`,
-          );
-        } else {
-          interimTranscript = normalizeSpeechTranscript(
-            `${interimTranscript} ${transcript}`,
-          );
-        }
-      }
-
-      if (finalTranscript) {
-        spokenTranscriptRef.current = finalTranscript;
-      }
-
-      setInput(
-        normalizeSpeechTranscript(
-          `${spokenTranscriptRef.current} ${interimTranscript}`,
-        ),
-      );
-    };
-
-    recognition.onerror = (event) => {
-      if (event.error === "not-allowed") {
-        setVoiceStatus("Microphone permission is blocked in this browser.");
-      } else if (event.error === "no-speech") {
-        setVoiceStatus("No speech detected. Try again and speak closer to the mic.");
-      } else {
-        setVoiceStatus("Voice capture stopped. Try again.");
-      }
-    };
-
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      setListening(false);
-
-      const spokenQuestion = normalizeSpeechTranscript(
-        spokenTranscriptRef.current || inputDraftRef.current,
-      );
-
-      if (!spokenQuestion) {
-        setVoiceStatus("Voice capture stopped.");
-        return;
-      }
-
-      setVoiceStatus("Voice captured. Sending your question...");
-      setInput("");
-      void sendMessageRef.current?.(spokenQuestion);
-    };
-
-    recognitionRef.current = recognition;
-
-    try {
-      recognition.start();
-    } catch {
-      recognitionRef.current = null;
-      setListening(false);
-      setVoiceStatus("Unable to start voice capture right now.");
-    }
-  };
-
-  const toggleVoiceCapture = () => {
-    if (listening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      return;
-    }
-
-    startVoiceCapture();
-  };
-
   const streamAssistantMessage = async (payload) => {
     const invalidQuery = payload?.answerMode === "scope-redirect";
     const fullText = String(
@@ -571,8 +347,10 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
       createMessage("assistant", "", {
         id: messageId,
         skillGap: null,
-        recommendedJobs: [],
-        externalJobs: [],
+        answerTitle: "",
+        sections: [],
+        nextSteps: [],
+        followUpQuestions: [],
         contextFlags: payload?.contextFlags || {},
         answerMode: payload?.answerMode || "",
         invalidQuery,
@@ -597,10 +375,14 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
               ...message,
               content: fullText,
               skillGap: invalidQuery ? null : payload?.skillGap || null,
-              recommendedJobs: invalidQuery
+              answerTitle: invalidQuery ? "" : payload?.answerTitle || "",
+              sections: invalidQuery ? [] : normalizeChatSections(payload?.sections),
+              nextSteps: invalidQuery
                 ? []
-                : payload?.recommendedJobs || [],
-              externalJobs: invalidQuery ? [] : payload?.externalJobs || [],
+                : normalizeStructuredList(payload?.nextSteps),
+              followUpQuestions: invalidQuery
+                ? []
+                : normalizeStructuredList(payload?.followUpQuestions, 3),
               contextFlags: payload?.contextFlags || {},
               answerMode: payload?.answerMode || "",
               invalidQuery,
@@ -609,10 +391,6 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
       ),
     );
     setStreaming(false);
-
-    if (voiceRepliesEnabled) {
-      speakAssistantReply(fullText);
-    }
   };
 
   const sendMessage = async (prefilledQuestion = "") => {
@@ -621,15 +399,6 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
       return;
     }
 
-    if (recognitionRef.current) {
-      recognitionRef.current.onend = null;
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-      setListening(false);
-    }
-
-    stopSpeechPlayback();
-
     const userMessage = createMessage("user", question);
     const history = normalizeHistory([...messages, userMessage]);
 
@@ -637,8 +406,17 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
     setInput("");
     setThinking(true);
     setWarning("");
-    setJobActionStatus({ type: "", message: "" });
-    setVoiceStatus("");
+
+    if (
+      !isPlacementRelevantQuestion(question, {
+        activeJobSnapshot: effectiveActiveJobSnapshot,
+        resumeAnalysis: effectiveResumeAnalysis,
+      })
+    ) {
+      setThinking(false);
+      await streamAssistantMessage({ answerMode: "scope-redirect" });
+      return;
+    }
 
     try {
       const response = await askPlacementAssistant({
@@ -664,22 +442,12 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
     }
   };
 
-  useEffect(() => {
-    sendMessageRef.current = sendMessage;
-  }, [sendMessage]);
-
-  useEffect(() => {
-    if (!voiceRepliesEnabled && hasSpeechSynthesisSupport()) {
-      window.speechSynthesis.cancel();
-    }
-  }, [voiceRepliesEnabled]);
-
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="fixed bottom-4 right-4 z-9999 flex h-14 w-14 items-center justify-center rounded-2xl bg-linear-to-br from-[#396CFF] via-[#6449F6] to-[#1EA0FF] text-white shadow-[0_18px_45px_rgba(67,97,238,0.35)] transition hover:scale-105"
+        className="fixed bottom-0 right-3 z-9999 flex h-10 w-10 items-center justify-center rounded-2xl bg-linear-to-br from-[#396CFF] via-[#6449F6] to-[#1EA0FF] text-white shadow-[0_18px_45px_rgba(67,97,238,0.35)] transition hover:scale-105"
         aria-label={
           open ? "Close AI placement assistant" : "Open AI placement assistant"
         }
@@ -689,7 +457,7 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
 
       {open ? (
         <div
-          className="fixed bottom-21 right-3 z-9999 flex h-[68vh] w-[90vw] max-w-90 flex-col overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.2)] sm:right-5 sm:h-120"
+          className="fixed bottom-10 right-3 z-9999 flex h-[68vh] w-[90vw] max-w-90 flex-col overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.2)] sm:right-5 sm:h-120"
           style={{ fontFamily: "'Segoe UI', Inter, system-ui, sans-serif" }}
         >
           <div className="bg-linear-to-br from-[#6F62F4] via-[#6276F6] to-[#46A0F8] px-4 pb-3 pt-4 text-white">
@@ -699,11 +467,8 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
                   <h2 className="text-[15px] font-semibold tracking-tight">
                     Ask Placement Assistant
                   </h2>
-                  <span className="rounded-full border border-white/35 bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white">
-                    built-in
-                  </span>
                 </div>
-                <p className="mt-2 max-w-[250px] text-[12px] leading-5 text-blue-50">
+                <p className="mt-2 max-w-62.5 text-[12px] leading-5 text-blue-50">
                   Resume-aware guidance for skills, job fit, and interview prep.
                 </p>
               </div>
@@ -718,96 +483,12 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
               </button>
             </div>
 
-            {/* <div className="mt-3 flex flex-wrap gap-1.5">
-              <StatusPill active label="Product-ready" />
-              <StatusPill
-                active={statusFlags.resumeAware}
-                label="Resume-aware"
-              />
-              <StatusPill active={statusFlags.jobAware} label="Job-aware" />
-              <StatusPill
-                active={voiceInputSupported}
-                label={listening ? "Listening" : "Voice input"}
-              />
-              {voiceRepliesSupported ? (
-                <button
-                  type="button"
-                  onClick={() => setVoiceRepliesEnabled((prev) => !prev)}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
-                    voiceRepliesEnabled
-                      ? "border-white/25 bg-white/20 text-white"
-                      : "border-white/20 bg-white/10 text-blue-100"
-                  }`}
-                  aria-label={
-                    voiceRepliesEnabled
-                      ? "Disable spoken chatbot replies"
-                      : "Enable spoken chatbot replies"
-                  }
-                >
-                  {voiceRepliesEnabled ? <Volume2 size={11} /> : <VolumeX size={11} />}
-                  {voiceRepliesEnabled ? "Voice replies on" : "Voice replies off"}
-                </button>
-              ) : null}
-            </div> */}
           </div>
 
           <div className="flex-1 overflow-y-auto bg-white px-4 py-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center gap-2">
-                <Target size={14} className="shrink-0 text-slate-500" />
-                <select
-                  value={focusJobId}
-                  onChange={(event) => setFocusJobId(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] font-medium text-slate-700 outline-none focus:border-blue-500"
-                >
-                  <option value="">General placement guidance</option>
-                  {jobs.map((job) => (
-                    <option key={job._id} value={job._id}>
-                      {job.jobTitle} - {job.company?.name || "Company"}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {statusFlags.resumeAware ? (
-                <p className="mt-2 text-[12px] font-medium leading-5 text-emerald-600">
-                  Resume gap analysis is connected for more personalized answers.
-                </p>
-              ) : (
-                <p className="mt-2 text-[11px] leading-5 text-slate-500">
-                  Run the{" "}
-                  <Link
-                    to="/student/resume-analyzer"
-                    className="font-semibold text-blue-600"
-                  >
-                    Resume Analyzer
-                  </Link>{" "}
-                  once to unlock stronger gap detection.
-                </p>
-              )}
-            </div>
-
             {warning ? (
               <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] font-medium text-amber-700">
                 {warning}
-              </div>
-            ) : null}
-
-            {jobActionStatus.message ? (
-              <div
-                className={`mt-3 rounded-2xl border px-4 py-3 text-[11px] font-medium ${
-                  jobActionStatus.type === "success"
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-rose-200 bg-rose-50 text-rose-700"
-                }`}
-              >
-                {jobActionStatus.message}
-              </div>
-            ) : null}
-
-            {voiceStatus ? (
-              <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-[11px] font-medium text-sky-700">
-                {voiceStatus}
               </div>
             ) : null}
 
@@ -817,7 +498,7 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
                   Try one of these
                 </h3>
                 <p className="mt-1 text-[12px] leading-5 text-slate-500">
-                  Quick prompts for resume, jobs, interviews, and role skills.
+                  Quick prompts for resumes, interviews, skills, and placement preparation.
                 </p>
 
                 <div className="mt-4 grid grid-cols-1 gap-2">
@@ -833,13 +514,6 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
                   ))}
                 </div>
 
-                <p className="mt-8 text-center text-[11px] leading-5 text-slate-400">
-                  By chatting, you agree to this{" "}
-                  <span className="font-medium text-blue-600 underline underline-offset-2">
-                    disclaimer
-                  </span>
-                  .
-                </p>
               </div>
             ) : (
               <div className="space-y-4 pt-4">
@@ -852,59 +526,47 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
                     </div>
                   ) : (
                     <div key={message.id} className="flex items-start gap-3">
-                      <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#6B7BFF] to-[#45C2FF] text-white shadow-sm">
+                      <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#6B7BFF] to-[#45C2FF] text-white shadow-sm">
                         <Sparkles size={14} />
                       </div>
 
                       <div className="min-w-0 flex-1">
                         <div className="rounded-[14px] bg-white">
+                          {!message.invalidQuery && message.answerTitle ? (
+                            <div className="mb-2 inline-flex rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-700">
+                              {message.answerTitle}
+                            </div>
+                          ) : null}
                           <p className="whitespace-pre-wrap text-[13px] font-medium leading-7 text-slate-900">
                             {message.content}
                           </p>
                         </div>
-
-                        {message.invalidQuery ? (
-                          <div className="mt-3 flex items-center gap-3 text-slate-400">
-                            <button
-                              type="button"
-                              className="transition hover:text-slate-600"
-                              aria-label="Helpful response"
-                            >
-                              <ThumbsUp size={18} />
-                            </button>
-                            <button
-                              type="button"
-                              className="transition hover:text-slate-600"
-                              aria-label="Unhelpful response"
-                            >
-                              <ThumbsDown size={18} />
-                            </button>
-                          </div>
-                        ) : null}
 
                         {!message.invalidQuery && message.skillGap ? (
                           <SkillGapPanel skillGap={message.skillGap} />
                         ) : null}
 
                         {!message.invalidQuery &&
-                        Array.isArray(message.recommendedJobs) &&
-                        message.recommendedJobs.length > 0 ? (
-                          <RecommendationPanel
-                            title="Recommended Jobs"
-                            items={message.recommendedJobs}
-                            internal
-                            applyingJobId={applyingJobId}
-                            onApplyInternalJob={handleApplyRecommendation}
+                        Array.isArray(message.sections) &&
+                        message.sections.length > 0 ? (
+                          <ChatInsightSections sections={message.sections} />
+                        ) : null}
+
+                        {!message.invalidQuery &&
+                        Array.isArray(message.nextSteps) &&
+                        message.nextSteps.length > 0 ? (
+                          <ChatActionPlan
+                            title="Next Steps"
+                            items={message.nextSteps}
                           />
                         ) : null}
 
                         {!message.invalidQuery &&
-                        Array.isArray(message.externalJobs) &&
-                        message.externalJobs.length > 0 ? (
-                          <RecommendationPanel
-                            title="External Leads"
-                            items={message.externalJobs}
-                            applyingJobId={applyingJobId}
+                        Array.isArray(message.followUpQuestions) &&
+                        message.followUpQuestions.length > 0 ? (
+                          <FollowUpPromptBar
+                            prompts={message.followUpQuestions}
+                            onSelectPrompt={(prompt) => void sendMessage(prompt)}
                           />
                         ) : null}
                       </div>
@@ -914,7 +576,7 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
 
                 {thinking ? (
                   <div className="flex items-start gap-3">
-                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#6B7BFF] to-[#45C2FF] text-white shadow-sm">
+                    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#6B7BFF] to-[#45C2FF] text-white shadow-sm">
                       <Sparkles size={14} />
                     </div>
 
@@ -945,26 +607,9 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
                       void sendMessage();
                     }
                   }}
-                  placeholder="Ask your question..."
+                  placeholder="Ask a placement-related question..."
                   className="max-h-24 min-h-[34px] flex-1 resize-none bg-transparent px-2 py-1 text-[13px] font-medium text-slate-800 outline-none placeholder:text-slate-400"
                 />
-                <button
-                  type="button"
-                  onClick={toggleVoiceCapture}
-                  disabled={!voiceInputSupported || thinking || streaming}
-                  className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                    listening
-                      ? "bg-rose-100 text-rose-600 hover:bg-rose-200"
-                      : "bg-sky-100 text-sky-600 hover:bg-sky-200"
-                  }`}
-                  aria-label={
-                    listening
-                      ? "Stop voice input"
-                      : "Start voice input"
-                  }
-                >
-                  {listening ? <MicOff size={14} /> : <Mic size={14} />}
-                </button>
                 <button
                   type="button"
                   onClick={() => void sendMessage()}
@@ -978,23 +623,6 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
                   )}
                 </button>
               </div>
-
-              <div className="mt-2 flex flex-wrap items-center gap-2 px-2 text-[11px] font-medium">
-                <span className="text-slate-500">
-                  {voiceInputSupported
-                    ? listening
-                      ? "Listening now. Stop the mic to send."
-                      : "Tap the mic to ask by voice."
-                    : "Voice input works in supported browsers like Chrome and Edge."}
-                </span>
-                {voiceRepliesSupported ? (
-                  <span className="text-sky-600">
-                    {voiceRepliesEnabled
-                      ? "Spoken replies are enabled."
-                      : "Spoken replies are muted."}
-                  </span>
-                ) : null}
-              </div>
             </div>
           </div>
         </div>
@@ -1002,18 +630,6 @@ const ChatBot = ({ selectedJobId = "", resumeAnalysis = null }) => {
     </>
   );
 };
-
-const StatusPill = ({ active, label }) => (
-  <span
-    className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${
-      active
-        ? "border border-white/25 bg-white/20 text-white"
-        : "border border-white/20 bg-white/10 text-blue-100"
-    }`}
-  >
-    {label}
-  </span>
-);
 
 const SkillGapPanel = ({ skillGap }) => {
   const missingSkills = Array.isArray(skillGap?.missing_skills)
@@ -1073,137 +689,57 @@ const SkillGapPanel = ({ skillGap }) => {
   );
 };
 
-const RecommendationPanel = ({
-  title,
-  items,
-  internal = false,
-  applyingJobId = "",
-  onApplyInternalJob,
-}) => (
-  <div className="mt-3 rounded-[14px] border border-slate-200 bg-slate-50 p-3">
-    <div className="mb-3 flex items-center gap-2">
-      <Briefcase size={13} className="text-blue-600" />
-      <p className="text-[12px] font-semibold text-slate-900">{title}</p>
+const ChatInsightSections = ({ sections }) => (
+  <div className="mt-3 grid gap-3">
+    {sections.map((section) => (
+      <div
+        key={section.title}
+        className="rounded-[14px] border border-slate-200 bg-slate-50 p-3"
+      >
+        <p className="text-[12px] font-semibold text-slate-900">{section.title}</p>
+        <div className="mt-2 space-y-2">
+          {section.items.map((item) => (
+            <div key={`${section.title}-${item}`} className="flex gap-2">
+              <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
+              <p className="text-[11px] leading-5 text-slate-600">{item}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const ChatActionPlan = ({ title, items }) => (
+  <div className="mt-3 rounded-[14px] border border-emerald-200 bg-emerald-50/70 p-3">
+    <p className="text-[12px] font-semibold text-emerald-900">{title}</p>
+    <div className="mt-2 space-y-2">
+      {items.map((item, index) => (
+        <div key={`${title}-${item}`} className="flex gap-2">
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[9px] font-bold text-white">
+            {index + 1}
+          </span>
+          <p className="text-[11px] leading-5 text-emerald-900">{item}</p>
+        </div>
+      ))}
     </div>
+  </div>
+);
 
-    <div className="space-y-3">
-      {items.slice(0, 3).map((item) => {
-        const internalJobStatus = internal
-          ? resolveInternalJobStatus(item, applyingJobId === item.job_id)
-          : null;
-        const internalJobLink =
-          item.view_url || (item.job_id ? `/student/jobs/${item.job_id}` : "");
-
-        return (
-          <div
-            key={`${item.job_id || item.job_title}-${item.source || "internal"}`}
-            className="rounded-[14px] border border-slate-200 bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.06)]"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                {internal && internalJobLink ? (
-                  <Link
-                    to={internalJobLink}
-                    className="text-[13px] font-semibold leading-5 text-slate-900 transition hover:text-blue-600"
-                  >
-                    {item.job_title}
-                  </Link>
-                ) : item.apply_url ? (
-                  <a
-                    href={item.apply_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[13px] font-semibold leading-5 text-slate-900 transition hover:text-blue-600"
-                  >
-                    {item.job_title}
-                  </a>
-                ) : (
-                  <p className="text-[13px] font-semibold leading-5 text-slate-900">
-                    {item.job_title}
-                  </p>
-                )}
-
-                <p className="mt-0.5 text-[11px] leading-5 text-slate-500">
-                  {item.company || item.source || "Opportunity"}
-                  {item.location ? ` | ${item.location}` : ""}
-                </p>
-              </div>
-
-              {internalJobStatus ? (
-                <span
-                  className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${
-                    internalJobStatus.tone === "success"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : internalJobStatus.tone === "warn"
-                        ? "bg-amber-100 text-amber-700"
-                        : internalJobStatus.tone === "info"
-                          ? "bg-sky-100 text-sky-700"
-                          : "bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  {internalJobStatus.label}
-                </span>
-              ) : item.source ? (
-                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
-                  {item.source}
-                </span>
-              ) : null}
-            </div>
-
-            {item.reason ? (
-              <p className="mt-2 text-[11px] leading-5 text-slate-600">
-                {item.reason}
-              </p>
-            ) : null}
-
-            {Array.isArray(item.matched_skills) &&
-            item.matched_skills.length > 0 ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {item.matched_skills.slice(0, 3).map((skill) => (
-                  <span
-                    key={`${item.job_title}-${skill}`}
-                    className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700"
-                  >
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {internal && internalJobLink ? (
-                <Link
-                  to={internalJobLink}
-                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-200"
-                >
-                  View Job
-                </Link>
-              ) : null}
-
-              {internal ? (
-                <button
-                  type="button"
-                  onClick={() => onApplyInternalJob?.(item)}
-                  disabled={internalJobStatus?.disabled || !item.job_id}
-                  className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
-                >
-                  {internalJobStatus?.actionLabel || "Apply"}
-                </button>
-              ) : item.apply_url ? (
-                <a
-                  href={item.apply_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-blue-700"
-                >
-                  {item.action_label || "Search & Apply"}
-                  <ExternalLink size={12} />
-                </a>
-              ) : null}
-            </div>
-          </div>
-        );
-      })}
+const FollowUpPromptBar = ({ prompts, onSelectPrompt }) => (
+  <div className="mt-3 rounded-[14px] border border-slate-200 bg-white p-3 shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+    <p className="text-[12px] font-semibold text-slate-900">Ask Next</p>
+    <div className="mt-2 flex flex-wrap gap-2">
+      {prompts.map((prompt) => (
+        <button
+          key={prompt}
+          type="button"
+          onClick={() => onSelectPrompt?.(prompt)}
+          className="rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-200"
+        >
+          {prompt}
+        </button>
+      ))}
     </div>
   </div>
 );

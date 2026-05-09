@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { getStudentJobs } from "../../services/jobApi.jsx";
+import "./JobList.css";
 
 const getLogoUrl = (logo) => {
   if (!logo) return "";
@@ -11,33 +12,73 @@ const getLogoUrl = (logo) => {
 
 const formatDate = (value) => {
   if (!value) return "Not specified";
-  return new Date(value).toLocaleDateString("en-IN");
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "Not specified";
+  }
+
+  return parsed.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 };
 
 const statusFromJob = (job) => {
   if (job.hasApplied) {
     return {
       label: "Applied",
-      classes:
-        "border-emerald-400/50 bg-emerald-500/15 text-emerald-200",
+      className: "job-list-card__status--applied",
     };
   }
+
   if (job.applicationsClosed) {
     return {
       label: "Closed",
-      classes: "border-rose-400/50 bg-rose-500/15 text-rose-200",
+      className: "job-list-card__status--closed",
     };
   }
+
   if (job.canApply) {
     return {
       label: "Can Apply",
-      classes: "border-sky-400/50 bg-sky-500/15 text-sky-200",
+      className: "job-list-card__status--ready",
     };
   }
+
   return {
     label: "Invite Required",
-    classes: "border-amber-400/50 bg-amber-500/15 text-amber-200",
+    className: "job-list-card__status--invite",
   };
+};
+
+const handleCardPointerMove = (event) => {
+  if (event.pointerType === "touch") return;
+
+  const card = event.currentTarget;
+  const bounds = card.getBoundingClientRect();
+  const x = (event.clientX - bounds.left) / bounds.width;
+  const y = (event.clientY - bounds.top) / bounds.height;
+  const rotateY = (x - 0.5) * 14;
+  const rotateX = (0.5 - y) * 14;
+
+  card.style.setProperty("--job-card-rotate-x", `${rotateX.toFixed(2)}deg`);
+  card.style.setProperty("--job-card-rotate-y", `${rotateY.toFixed(2)}deg`);
+  card.style.setProperty("--job-card-glow-x", `${(x * 100).toFixed(2)}%`);
+  card.style.setProperty("--job-card-glow-y", `${(y * 100).toFixed(2)}%`);
+  card.style.setProperty("--job-card-glow-opacity", "1");
+};
+
+const resetCardPointer = (event) => {
+  const card = event.currentTarget;
+
+  card.style.setProperty("--job-card-rotate-x", "0deg");
+  card.style.setProperty("--job-card-rotate-y", "0deg");
+  card.style.setProperty("--job-card-glow-x", "50%");
+  card.style.setProperty("--job-card-glow-y", "50%");
+  card.style.setProperty("--job-card-glow-opacity", "0");
 };
 
 const JobList = () => {
@@ -53,6 +94,7 @@ const JobList = () => {
     const loadJobs = async () => {
       try {
         setLoading(true);
+        setError("");
         const res = await getStudentJobs();
         if (!isMounted) return;
         setJobs(res.data.jobs || []);
@@ -80,6 +122,7 @@ const JobList = () => {
 
   const filteredJobs = useMemo(() => {
     const needle = query.trim().toLowerCase();
+
     return jobs.filter((job) => {
       const passesQuery =
         !needle ||
@@ -106,22 +149,22 @@ const JobList = () => {
 
   return (
     <div className="page-shell">
-      <div className="page-inner max-w-7xl space-y-6">
+      <div className="page-inner job-list-page">
         <motion.header
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-6 md:p-8 space-y-4"
+          className="glass-card job-list-header"
         >
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="job-list-header__top">
             <div>
               <h1 className="section-title">Explore Opportunities</h1>
-              <p className="muted mt-2">
+              <p className="muted job-list-header__copy">
                 Find roles, track your application status, and apply to invited
                 jobs before deadlines.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="job-list-stats">
               <StatChip label="Total" value={stats.total} />
               <StatChip label="Can Apply" value={stats.canApply} />
               <StatChip label="Applied" value={stats.applied} />
@@ -129,14 +172,14 @@ const JobList = () => {
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+          <div className="job-list-header__controls">
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(event) => setQuery(event.target.value)}
               placeholder="Search by role, company, or location..."
-              className="input"
+              className="input job-list-search"
             />
-            <div className="flex flex-wrap gap-2">
+            <div className="job-list-filters">
               <FilterButton
                 active={statusFilter === "all"}
                 onClick={() => setStatusFilter("all")}
@@ -167,107 +210,127 @@ const JobList = () => {
         </motion.header>
 
         {loading && (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="job-list-grid">
             {[1, 2, 3, 4, 5, 6].map((key) => (
-              <div key={key} className="glass-card h-56 animate-pulse" />
+              <div key={key} className="job-list-card job-list-card--skeleton">
+                <span className="job-skeleton job-skeleton--brand" />
+                <span className="job-skeleton job-skeleton--title" />
+                <div className="job-list-card__meta-grid">
+                  <span className="job-skeleton job-skeleton--tile" />
+                  <span className="job-skeleton job-skeleton--tile" />
+                  <span className="job-skeleton job-skeleton--tile" />
+                  <span className="job-skeleton job-skeleton--tile" />
+                </div>
+                <span className="job-skeleton job-skeleton--skills" />
+                <span className="job-skeleton job-skeleton--actions" />
+              </div>
             ))}
           </div>
         )}
 
         {!loading && error && (
-          <p className="rounded-xl border border-rose-400/50 bg-rose-500/15 px-4 py-3 text-rose-200">
-            {error}
-          </p>
+          <p className="job-list-message job-list-message--error">{error}</p>
         )}
 
         {!loading && !error && filteredJobs.length === 0 && (
-          <div className="glass-card p-6 md:p-8">
-            <p className="text-lg">No jobs found for the selected filters.</p>
+          <div className="glass-card job-list-empty">
+            <p className="job-list-empty__title">
+              No jobs found for the selected filters.
+            </p>
           </div>
         )}
 
         {!loading && !error && filteredJobs.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="job-list-grid">
             {filteredJobs.map((job, idx) => {
               const status = statusFromJob(job);
               const topSkills = Array.isArray(job.skills?.mustHave)
-                ? job.skills.mustHave.slice(0, 4)
+                ? job.skills.mustHave.slice(0, 3)
                 : [];
 
               return (
                 <motion.article
                   key={job._id}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   transition={{ delay: idx * 0.03 }}
-                  className="glass-card p-5 flex flex-col gap-4"
+                  className="job-list-card"
+                  onPointerMove={handleCardPointerMove}
+                  onPointerLeave={resetCardPointer}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
+                  <div className="job-list-card__head">
+                    <div className="job-list-card__brand">
                       <img
                         src={getLogoUrl(job.company?.logo) || "/default-avatar.png"}
                         alt={job.company?.name || "Company"}
-                        className="h-11 w-11 rounded-lg border border-white/20 object-cover"
+                        className="job-list-card__logo"
                       />
                       <div>
-                        <p className="text-sm font-semibold">
+                        <p className="job-list-card__company">
                           {job.company?.name || "Company"}
                         </p>
-                        <p className="muted text-xs">
+                        <p className="job-list-card__location">
                           {job.employmentDetails?.location || "Location not specified"}
                         </p>
                       </div>
                     </div>
-                    <span className={`badge ${status.classes}`}>{status.label}</span>
+                    <span className={`job-list-card__status ${status.className}`}>
+                      {status.label}
+                    </span>
                   </div>
 
-                  <div className="space-y-1">
-                    <h2 className="text-lg font-semibold leading-snug">{job.jobTitle}</h2>
-                    <p className="muted text-sm line-clamp-2">
-                      {job.jobDescription || "Description not available"}
+                  <div className="job-list-card__title-block">
+                    <p className="job-list-card__kicker">
+                      {job.employmentDetails?.employmentType || "Opportunity"}
                     </p>
+                    <h2 className="job-list-card__title">{job.jobTitle}</h2>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <MetaTile
-                      label="Job Type"
-                      value={job.employmentDetails?.employmentType || "Not specified"}
-                    />
+                  <div className="job-list-card__meta-grid">
                     <MetaTile
                       label="Salary"
                       value={job.compensation?.salaryRange || "As per company"}
                     />
-                    <MetaTile label="Deadline" value={formatDate(job.timeline?.lastDate)} />
+                    <MetaTile
+                      label="Deadline"
+                      value={formatDate(job.timeline?.lastDate)}
+                    />
                     <MetaTile
                       label="Work Mode"
                       value={job.employmentDetails?.workMode || "Not specified"}
                     />
+                    <MetaTile
+                      label="Location"
+                      value={job.employmentDetails?.location || "Not specified"}
+                    />
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  <div className="job-list-card__skills">
                     {topSkills.length > 0 ? (
                       topSkills.map((skill) => (
-                        <span key={`${job._id}-${skill}`} className="badge">
+                        <span key={`${job._id}-${skill}`} className="job-skill-chip">
                           {skill}
                         </span>
                       ))
                     ) : (
-                      <span className="muted text-xs">Skills not specified</span>
+                      <span className="job-list-card__skills-empty">
+                        Skills not specified
+                      </span>
                     )}
                   </div>
 
-                  <div className="mt-auto grid gap-2">
+                  <div className="job-list-card__actions">
                     <Link
                       to={`/student/jobs/${job._id}`}
-                      className="btn-primary w-full justify-center"
+                      className="job-card-link job-card-link--primary"
                     >
-                      View Details
+                      Details
                     </Link>
                     <Link
                       to={`/student/resume-analyzer?jobId=${job._id}`}
-                      className="btn-ghost w-full justify-center"
+                      className="job-card-link"
                     >
-                      Analyze Resume
+                      Resume Fit
                     </Link>
                   </div>
                 </motion.article>
@@ -281,9 +344,9 @@ const JobList = () => {
 };
 
 const StatChip = ({ label, value }) => (
-  <div className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-center">
-    <p className="muted text-[11px] uppercase tracking-wide">{label}</p>
-    <p className="text-base font-semibold">{value}</p>
+  <div className="job-stat-chip">
+    <p className="job-stat-chip__label">{label}</p>
+    <p className="job-stat-chip__value">{value}</p>
   </div>
 );
 
@@ -291,20 +354,16 @@ const FilterButton = ({ active, onClick, label }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
-      active
-        ? "border-cyan-300/55 bg-cyan-400/20 text-cyan-100"
-        : "border-white/15 bg-white/5 text-slate-300 hover:border-cyan-300/35"
-    }`}
+    className={`job-filter-button ${active ? "is-active" : ""}`}
   >
     {label}
   </button>
 );
 
 const MetaTile = ({ label, value }) => (
-  <div className="rounded-lg border border-white/10 bg-white/5 p-2">
-    <p className="muted text-[10px] uppercase tracking-wide">{label}</p>
-    <p className="text-xs">{value}</p>
+  <div className="job-meta-tile">
+    <p className="job-meta-tile__label">{label}</p>
+    <p className="job-meta-tile__value">{value}</p>
   </div>
 );
 

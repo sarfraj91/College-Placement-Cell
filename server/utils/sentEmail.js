@@ -1,44 +1,61 @@
-import nodemailer from "nodemailer";
+import axios from "axios";
 
-// Create a transporter using Ethereal test credentials.
-// For production, replace with your actual SMTP server details.
-const sendEmail = async (email, subject, message) => {
+const sendEmail = async (email, subject, message, options = {}) => {
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
+    const apiKey = process.env.BREVO_API_KEY;
+    const senderEmail = options.fromEmail || process.env.BREVO_SENDER_EMAIL;
+    const senderName =
+      options.fromName || process.env.BREVO_SENDER_NAME || "Placement Cell";
 
-      // env values are strings → convert to number
-      port: Number(process.env.SMTP_PORT),
+    if (!apiKey) {
+      throw new Error("BREVO_API_KEY is not configured");
+    }
 
-      // auto handle 465 vs 587
-      secure: process.env.SMTP_PORT == 465,
+    if (!senderEmail) {
+      throw new Error("BREVO_SENDER_EMAIL is not configured");
+    }
 
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+    console.log("Sending email with Brevo...");
+
+    const payload = {
+      sender: {
+        name: senderName,
+        email: senderEmail,
       },
-    });
+      to: [{ email }],
+      subject,
+      htmlContent: message,
+    };
 
-    console.log("⏳ Sending email...");
+    const replyToEmail =
+      options.replyTo || process.env.BREVO_REPLY_TO_EMAIL || undefined;
+    if (replyToEmail) {
+      payload.replyTo = {
+        email: replyToEmail,
+        name: options.replyToName || senderName,
+      };
+    }
 
-    const info = await transporter.sendMail({
-      from: process.env.SMTP_ADMIN,
-      to: email,
-      subject: subject,
-      html: message,
-    });
+    const { data } = await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      payload,
+      {
+        headers: {
+          "api-key": apiKey,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        timeout: Number(process.env.BREVO_TIMEOUT_MS || 15000),
+      },
+    );
 
-  console.log("✅ Email sent to real inbox:", info.messageId);
+    console.log("Email sent with Brevo:", data?.messageId || "queued");
 
-    return info;
-
-
-
-    // IMPORTANT: return something so caller knows it succeeded
-    return info;
+    return data;
   } catch (e) {
-    console.error("❌ Email error:", e);
-    throw e; // let controller handle error
+    const details = e.response?.data || e.message;
+    console.error("Email error:", details);
+    throw e;
   }
 };
 

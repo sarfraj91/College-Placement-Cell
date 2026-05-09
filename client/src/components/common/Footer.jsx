@@ -1,147 +1,161 @@
-import { useState } from "react";
-import API from "../../services/api";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  BriefcaseBusiness,
+  Clock3,
+  MessageCircleMore,
+  PhoneCall,
+} from "lucide-react";
+import { Link } from "react-router-dom";
+import logo from "../../assets/placement-logo.png";
 import "./Footer.css";
 
+const helpfulLinks = [
+  { label: "Home", to: "/" },
+  { label: "Available Jobs", to: "/job" },
+  { label: "Resume Analyzer", to: "/student/resume-analyzer" },
+  { label: "Mock Interview", to: "/preparation/mock-interview" },
+];
+
 const Footer = () => {
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    rating: 0,
-    message: "",
-    channel: "web",
-  });
-  const [status, setStatus] = useState({ error: "", success: "", loading: false });
-
-  const handleChange = (e) =>
-    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
-
-  // ✅ Simple rating selector
-  const setRating = (value) => setForm((p) => ({ ...p, rating: value }));
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setStatus({ error: "", success: "", loading: true });
-
-    if (!form.rating || !form.message.trim()) {
-      setStatus({ error: "Rating and message are required", success: "", loading: false });
-      return;
-    }
-
-    try {
-      const payload = {
-        ...form,
-        channel: form.phone ? "whatsapp" : "web",
-      };
-
-      const res = await API.post("/users/feedback", payload);
-      setStatus({ error: "", success: res.data.message, loading: false });
-      setForm({
-        name: "",
-        email: "",
-        phone: "",
-        rating: 0,
-        message: "",
-        channel: "web",
-      });
-    } catch (err) {
-      setStatus({
-        error: err.response?.data?.message || "Something went wrong",
-        success: "",
-        loading: false,
-      });
-    }
-  };
+  const year = new Date().getFullYear();
+  const supportPhone =
+    import.meta.env.VITE_SUPPORT_PHONE || "+91 70616 09072";
+  const supportWhatsAppUrl =
+    import.meta.env.VITE_SUPPORT_WHATSAPP_URL ||
+    "https://wa.me/917061609072";
+  const supportHours =
+    import.meta.env.VITE_SUPPORT_HOURS || "10am - 6pm";
+  const socialLinks = [
+    {
+      href:
+        import.meta.env.VITE_SOCIAL_FACEBOOK_URL ||
+        "https://facebook.com/your-page",
+      label: "Facebook",
+    },
+    {
+      href:
+        import.meta.env.VITE_SOCIAL_TWITTER_URL ||
+        "https://twitter.com/your-handle",
+      label: "Twitter",
+    },
+    {
+      href:
+        import.meta.env.VITE_SOCIAL_YOUTUBE_URL ||
+        "https://youtube.com/@your-channel",
+      label: "YouTube",
+    },
+    {
+      href:
+        import.meta.env.VITE_SOCIAL_INSTAGRAM_URL ||
+        "https://instagram.com/your-handle",
+      label: "Instagram",
+    },
+    {
+      href:
+        import.meta.env.VITE_SOCIAL_LINKEDIN_URL ||
+        "https://linkedin.com/company/your-page",
+      label: "LinkedIn",
+    },
+  ];
+  const supportPhoneHref = `tel:${supportPhone.replace(/\s+/g, "")}`;
 
   return (
-    <footer className="footer">
-      <div className="footer-inner">
-        {/* ================= BRAND ================= */}
-        <div className="footer-brand">
-          <h3>Placement Cell</h3>
-          <p className="muted">
-            Modern placement management for students and admins.
-          </p>
-          <div className="footer-support">
-            <span>Support:</span>
-            <a href="tel:+917061609072">7061609072</a>
+    <footer className="footer-shell">
+      <div className="footer-container">
+        <div className="footer-grid">
+          <div className="footer-brand">
+            <Link to="/" className="footer-brand-link">
+              <img
+                src={logo}
+                alt="PlacementCell logo"
+                className="footer-logo"
+              />
+
+              <div>
+                <span className="footer-kicker">Interview Prep</span>
+                <h2>PlacementCell</h2>
+              </div>
+            </Link>
+
+            <p className="footer-copy">
+              AI-powered placement support for student profiles, invited job
+              applications, resume analysis, and mock interview preparation.
+            </p>
+
+            <a
+              className="footer-whatsapp"
+              href={supportWhatsAppUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessageCircleMore size={18} />
+              WhatsApp Support
+            </a>
           </div>
-          <a
-            className="footer-whatsapp"
-            href="https://wa.me/917061609072"
-            target="_blank"
-            rel="noreferrer"
-          >
-            WhatsApp Support
-          </a>
-        </div>
 
-        {/* ================= LINKS ================= */}
-        <div className="footer-links">
-          <p className="footer-title">Quick Links</p>
-          <a href="/login">Login</a>
-          <a href="/register">Register</a>
-          <a href="/">Home</a>
-        </div>
+          <div className="footer-column">
+            <h3>Helpful Links</h3>
+            <div className="footer-link-list">
+              {helpfulLinks.map((item) => (
+                <Link key={item.to} to={item.to} className="footer-link">
+                  <ArrowRight size={16} />
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
 
-        {/* ================= FEEDBACK ================= */}
-        <form className="footer-form" onSubmit={handleSubmit}>
-          <p className="footer-title">Support & Feedback</p>
+          <div className="footer-column">
+            <h3>Get In Touch</h3>
+            <div className="footer-contact-list">
+              <a href={supportPhoneHref} className="footer-contact">
+                <PhoneCall size={18} />
+                {supportPhone}
+              </a>
 
-          {status.error && <p className="footer-alert error">{status.error}</p>}
-          {status.success && <p className="footer-alert success">{status.success}</p>}
-
-          <input
-            name="name"
-            placeholder="Your name (optional)"
-            value={form.name}
-            onChange={handleChange}
-          />
-          <input
-            name="email"
-            type="email"
-            placeholder="Email (optional)"
-            value={form.email}
-            onChange={handleChange}
-          />
-          <input
-            name="phone"
-            placeholder="WhatsApp number (optional)"
-            value={form.phone}
-            onChange={handleChange}
-          />
-
-          <div className="footer-rating">
-            <span>Rating:</span>
-            {[1, 2, 3, 4, 5].map((r) => (
-              <button
-                type="button"
-                key={r}
-                className={form.rating >= r ? "active" : ""}
-                onClick={() => setRating(r)}
+              <a
+                href={supportWhatsAppUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="footer-contact"
               >
-                ★
-              </button>
-            ))}
+                <MessageCircleMore size={18} />
+                Chat on WhatsApp
+              </a>
+
+              <div className="footer-contact">
+                <BriefcaseBusiness size={18} />
+                Invite-only job support
+              </div>
+
+              <div className="footer-contact">
+                <Clock3 size={18} />
+                Support hours: {supportHours}
+              </div>
+            </div>
           </div>
 
-          <textarea
-            name="message"
-            rows="3"
-            placeholder="Your message"
-            value={form.message}
-            onChange={handleChange}
-          />
+          <div className="footer-column">
+            <h3>Connect With Us</h3>
+            <div className="footer-social-list">
+              {socialLinks.map((item) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="footer-social"
+                >
+                  <ArrowUpRight size={18} />
+                  {item.label}
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
 
-          <button type="submit" disabled={status.loading}>
-            {status.loading ? "Sending..." : "Send Feedback"}
-          </button>
-        </form>
-      </div>
-
-      {/* ================= FOOTER BASE ================= */}
-      <div className="footer-base">
-        © 2026 Placement Cell System. All rights reserved.
+        <div className="footer-bottom">Copyright © {year} PlacementCell</div>
       </div>
     </footer>
   );

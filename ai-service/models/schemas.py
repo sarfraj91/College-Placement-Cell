@@ -109,13 +109,22 @@ class ChatJobSuggestion(BaseModel):
     reason: str = ""
 
 
+class ChatResponseSection(BaseModel):
+    title: str = ""
+    items: list[str] = Field(default_factory=list)
+
+
 class ChatResponse(BaseModel):
     answer: str
+    answer_title: str = ""
     intent: str = "general"
     suggestions: list[str] = Field(default_factory=list)
     confidence: float = 0.0
     jobs: list[ChatJobSuggestion] = Field(default_factory=list)
     matched_topics: list[str] = Field(default_factory=list)
+    sections: list[ChatResponseSection] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
+    follow_up_questions: list[str] = Field(default_factory=list)
     fallback_used: bool = False
     answer_mode: str = "fallback"
     context_flags: dict[str, Any] = Field(default_factory=dict)
@@ -132,6 +141,12 @@ class InterviewQuestionItem(BaseModel):
     difficulty: str = "medium"
     role: str = "full stack"
     personalization: str = ""
+    interviewer_intent: str = ""
+    strong_signals: list[str] = Field(default_factory=list)
+    red_flags: list[str] = Field(default_factory=list)
+    answer: str = ""
+    highlights: list[str] = Field(default_factory=list)
+    answer_framework: list[str] = Field(default_factory=list)
 
 
 class GenerateQuestionsRequest(BaseModel):
@@ -152,6 +167,8 @@ class GenerateQuestionsResponse(BaseModel):
     role: str = "full stack"
     difficulty: str = "medium"
     profile_summary: str = ""
+    pack_summary: str = ""
+    focus_areas: list[str] = Field(default_factory=list)
     fallback_used: bool = False
 
 
@@ -160,6 +177,9 @@ class GenerateAnswerRequest(BaseModel):
     role: str = Field(default="full stack", min_length=2)
     difficulty: str = Field(default="medium", min_length=4)
     skills: list[str] = Field(default_factory=list)
+    focus_area: Optional[str] = ""
+    question_type: Optional[str] = ""
+    personalization: Optional[str] = ""
     projects: Optional[str] = ""
     experience: Optional[str] = ""
     resume_text: Optional[str] = ""
@@ -172,6 +192,9 @@ class GenerateAnswerResponse(BaseModel):
     answer: str
     highlights: list[str] = Field(default_factory=list)
     answer_framework: list[str] = Field(default_factory=list)
+    answer_hook: str = ""
+    delivery_tips: list[str] = Field(default_factory=list)
+    pitfalls: list[str] = Field(default_factory=list)
     fallback_used: bool = False
 
 
@@ -180,6 +203,10 @@ class EvaluateAnswerRequest(BaseModel):
     user_answer: str = Field(..., min_length=5)
     role: str = Field(default="full stack", min_length=2)
     difficulty: str = Field(default="medium", min_length=4)
+    projects: Optional[str] = ""
+    experience: Optional[str] = ""
+    resume_summary: Optional[str] = ""
+    resume_skills: list[str] = Field(default_factory=list)
 
 
 class EvaluateAnswerResponse(BaseModel):
@@ -188,6 +215,7 @@ class EvaluateAnswerResponse(BaseModel):
     improved_answer: str = ""
     verdict: str = ""
     score: int = Field(default=0, ge=0, le=100)
+    improvement_plan: list[str] = Field(default_factory=list)
     fallback_used: bool = False
 
 
@@ -196,11 +224,16 @@ class FollowUpRequest(BaseModel):
     user_answer: str = Field(..., min_length=5)
     role: str = Field(default="full stack", min_length=2)
     difficulty: str = Field(default="medium", min_length=4)
+    projects: Optional[str] = ""
+    experience: Optional[str] = ""
+    resume_summary: Optional[str] = ""
+    resume_skills: list[str] = Field(default_factory=list)
 
 
 class FollowUpResponse(BaseModel):
     follow_up_question: str
     reason: str = ""
+    what_to_cover: list[str] = Field(default_factory=list)
     fallback_used: bool = False
 
 
@@ -227,6 +260,8 @@ class MockInterviewStartResponse(BaseModel):
     opening: str
     first_question: str
     interviewer_style: str = ""
+    candidate_brief: str = ""
+    focus_areas: list[str] = Field(default_factory=list)
     role: str = "full stack"
     difficulty: str = "medium"
     english_level: str = "medium"
@@ -257,6 +292,8 @@ class MockInterviewNextResponse(BaseModel):
     should_end: bool = False
     closing_remark: str = ""
     focus_area: str = ""
+    answer_signal: str = ""
+    coaching_tip: str = ""
     fallback_used: bool = False
 
 
@@ -283,5 +320,10 @@ class MockInterviewFinishResponse(BaseModel):
     communication_score: int = Field(default=0, ge=0, le=100)
     technical_score: int = Field(default=0, ge=0, le=100)
     confidence_score: int = Field(default=0, ge=0, le=100)
+    hiring_signal: str = ""
+    communication_summary: str = ""
+    technical_summary: str = ""
+    confidence_summary: str = ""
+    next_steps: list[str] = Field(default_factory=list)
     integrity_note: str = ""
     fallback_used: bool = False

@@ -172,8 +172,8 @@ const JobDetail = () => {
           </p>
         </motion.header>
 
-        <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
-          <div className="space-y-5">
+        <div className="grid gap-3 lg:grid-cols-[1.35fr_0.65fr]">
+          <div className="space-y-3">
             <InfoSection title="Company Overview">
               <InfoGrid
                 items={[
@@ -203,7 +203,7 @@ const JobDetail = () => {
           <motion.aside
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-card p-5 h-fit lg:sticky lg:top-24 space-y-4"
+            className="glass-card p-5 h-fit lg:sticky lg:top-1 space-y-4"
           >
             <h2 className="text-lg font-semibold">Application Snapshot</h2>
             <InfoGrid
