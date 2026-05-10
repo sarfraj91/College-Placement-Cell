@@ -1,7 +1,9 @@
-import natural from "natural";
 import { removeStopwords } from "stopword";
 
-const tokenizer = new natural.WordTokenizer();
+const tokenizeWords = (text = "") =>
+  String(text || "")
+    .toLowerCase()
+    .match(/[a-z0-9+#.]+/g) || [];
 
 const SKILL_ALIASES = {
   python: ["python"],
@@ -91,8 +93,8 @@ export const analyzeResume = (resumeText, jobDescription) => {
   const loweredResume = String(resumeText || "").toLowerCase();
   const loweredJob = String(jobDescription || "").toLowerCase();
 
-  const resumeTokens = tokenizer.tokenize(loweredResume);
-  const jobTokens = tokenizer.tokenize(loweredJob);
+  const resumeTokens = tokenizeWords(loweredResume);
+  const jobTokens = tokenizeWords(loweredJob);
 
   const resumeWords = removeStopwords(resumeTokens);
   const jobWords = removeStopwords(jobTokens);
