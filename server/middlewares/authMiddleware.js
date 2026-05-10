@@ -1,9 +1,10 @@
 import jwt from "jsonwebtoken";
 import appError from "../utils/errorUtils.js";
+import getAuthToken from "../utils/authToken.js";
 
 const isLoggedIn = async (req, res, next) => {
   try {
-    const { token } = req.cookies;
+    const token = getAuthToken(req);
 
     if (!token) {
       return next(

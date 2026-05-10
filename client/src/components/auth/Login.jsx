@@ -66,9 +66,10 @@ const Login = () => {
     try {
       const res = await API.post("/users/login", { email, password, role });
       const user = res.data?.user;
+      const token = res.data?.token;
 
-      if (!user) {
-        setError("Login succeeded but user details were not returned");
+      if (!user || !token) {
+        setError("Login succeeded but session details were not returned");
         return;
       }
 
@@ -77,6 +78,7 @@ const Login = () => {
         return;
       }
 
+      localStorage.setItem("authToken", token);
       login(user);
 
       if (user.role === "admin") {

@@ -1,10 +1,10 @@
 import jwt from "jsonwebtoken";
 import appError from "../utils/errorUtils.js";
+import getAuthToken from "../utils/authToken.js";
 
 const isAdmin = (req, res, next) => {
   try {
-    // 1️⃣ Get token from cookies
-    const token = req.cookies?.token;
+    const token = getAuthToken(req);
 
     if (!token) {
       return next(new appError("Access denied. No token provided.", 403));
