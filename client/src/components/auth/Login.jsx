@@ -42,7 +42,7 @@ const showcaseHighlights = [
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { fetchUser } = useAuth();
+  const { login } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,14 +64,20 @@ const Login = () => {
     }
 
     try {
-      await API.post("/users/login", { email, password, role });
+      const res = await API.post("/users/login", { email, password, role });
+      const user = res.data?.user;
 
-      const user = await fetchUser();
+      if (!user) {
+        setError("Login succeeded but user details were not returned");
+        return;
+      }
 
       if (role !== user.role) {
         setError("Unauthorized role access");
         return;
       }
+
+      login(user);
 
       if (user.role === "admin") {
         navigate("/admin/dashboard");
