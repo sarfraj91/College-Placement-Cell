@@ -23,6 +23,21 @@ const isCollegeEmail = (email = "") =>
 // ✅ Allowed roles in this system
 const ALLOWED_ROLES = new Set(["student", "admin"]);
 
+const cleanupLocalFile = async (filePath) => {
+  if (!filePath) return;
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (error) {
+    console.warn("LOCAL FILE CLEANUP FAILED:", filePath, error.message);
+  }
+};
+
+const uploadAndCleanup = async (file, extra = {}) => {
+  const uploaded = await uploadToCloudinary(file.path);
+  await cleanupLocalFile(file.path);
+  return { ...uploaded, ...extra };
+};
+
 // 01.Registration logic here
 const register = async (req, res, next) => {
   try {
@@ -400,41 +415,59 @@ const postUserData = async (req, res, next) => {
     /* ================= CERTIFICATES ================= */
     if (!user.certificates) user.certificates = {};
 
-    const uploadCert = async (file, extra = {}) => {
-      const uploaded = await uploadToCloudinary(file.path);
-      fs.unlinkSync(file.path);
-      return { ...uploaded, ...extra };
-    };
+    const uploadTasks = [];
 
     if (req.files?.tenthMarksheet?.[0]) {
-      user.certificates.tenth = await uploadCert(req.files.tenthMarksheet[0]);
+      uploadTasks.push(
+        uploadAndCleanup(req.files.tenthMarksheet[0]).then((uploaded) => {
+          user.certificates.tenth = uploaded;
+        }),
+      );
     }
 
     const twelthFile =
       req.files?.twelthMarksheet?.[0] || req.files?.twelfthMarksheet?.[0];
     if (twelthFile) {
-      user.certificates.twelth = await uploadCert(twelthFile);
+      uploadTasks.push(
+        uploadAndCleanup(twelthFile).then((uploaded) => {
+          user.certificates.twelth = uploaded;
+        }),
+      );
     }
 
     if (req.files?.semesterMarksheet?.[0]) {
-      user.certificates.semester = await uploadCert(
-        req.files.semesterMarksheet[0],
+      uploadTasks.push(
+        uploadAndCleanup(req.files.semesterMarksheet[0]).then((uploaded) => {
+          user.certificates.semester = uploaded;
+        }),
       );
     }
 
     if (req.files?.cocubes?.[0]) {
-      user.certificates.cocubes = await uploadCert(req.files.cocubes[0]);
+      uploadTasks.push(
+        uploadAndCleanup(req.files.cocubes[0]).then((uploaded) => {
+          user.certificates.cocubes = uploaded;
+        }),
+      );
     }
 
     const amcatFile = req.files?.amcat?.[0] || req.files?.mcat?.[0];
     if (amcatFile) {
-      user.certificates.amcat = await uploadCert(amcatFile);
+      uploadTasks.push(
+        uploadAndCleanup(amcatFile).then((uploaded) => {
+          user.certificates.amcat = uploaded;
+        }),
+      );
     }
 
     if (req.files?.resume?.[0]) {
-      user.certificates.resume = await uploadCert(req.files.resume[0], {
-        title: req.body.resumeTitle || "Resume",
-      });
+      uploadTasks.push(
+        uploadAndCleanup(req.files.resume[0], {
+          title: req.body.resumeTitle || "Resume",
+        }).then((uploaded) => {
+          user.certificates.resume = uploaded;
+        }),
+      );
     }
 
     // if (req.files?.other?.[0]) {
@@ -456,10 +489,15 @@ const postUserData = async (req, res, next) => {
           ? req.body.otherTitle[i]
           : req.body.otherTitle || "Other Certificate";
 
-        const uploaded = await uploadCert(file, { title });
-        user.certificates.other.push(uploaded);
+        uploadTasks.push(
+          uploadAndCleanup(file, { title }).then((uploaded) => {
+            user.certificates.other.push(uploaded);
+          }),
+        );
       }
     }
+
+    await Promise.all(uploadTasks);
 
     /* ================= FINAL ================= */
     user.profileCompleted = true;
@@ -664,11 +702,15 @@ const updateProfile = async (req, res, next) => {
     };
 
     /* ================= AVATAR ================= */
+    const uploadTasks = [];
+
     if (req.files?.avatar?.[0]) {
       const file = req.files.avatar[0];
-      const upload = await uploadToCloudinary(file.path);
-      user.avatar = upload;
-      fs.unlinkSync(file.path);
+      uploadTasks.push(
+        uploadAndCleanup(file).then((uploaded) => {
+          user.avatar = uploaded;
+        }),
+      );
     }
 
     /* ================= CERTIFICATES ================= */
@@ -691,9 +733,11 @@ const updateProfile = async (req, res, next) => {
         (field === "amcat" ? req.files?.mcat?.[0] : null);
 
       if (file) {
-        const upload = await uploadToCloudinary(file.path);
-        user.certificates[certMap[field]] = upload;
-        fs.unlinkSync(file.path);
+        uploadTasks.push(
+          uploadAndCleanup(file).then((uploaded) => {
+            user.certificates[certMap[field]] = uploaded;
+          }),
+        );
       }
     }
 
@@ -709,11 +753,15 @@ const updateProfile = async (req, res, next) => {
           ? req.body.otherTitle[i]
           : req.body.otherTitle || "Other Certificate";
 
-        const uploaded = await uploadToCloudinary(file.path);
-        user.certificates.other.push({ ...uploaded, title });
-        fs.unlinkSync(file.path);
+        uploadTasks.push(
+          uploadAndCleanup(file, { title }).then((uploaded) => {
+            user.certificates.other.push(uploaded);
+          }),
+        );
       }
     }
+
+    await Promise.all(uploadTasks);
 
     user.profileCompleted = true;
     await user.save();

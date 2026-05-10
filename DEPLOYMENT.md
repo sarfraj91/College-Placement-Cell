@@ -27,6 +27,9 @@ Create or log in to:
 ```env
 GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-flash-latest
+ENABLE_EMBEDDING_MODEL=true
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+ENABLE_JOB_GENERATOR=false
 JOB_GENERATION_MODEL=google/flan-t5-base
 JOB_GENERATION_FALLBACK_MODEL=distilgpt2
 ```

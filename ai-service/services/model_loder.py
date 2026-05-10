@@ -6,6 +6,13 @@ from threading import Lock
 from typing import Any
 
 
+def _env_flag(name: str, default: bool = True) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
 @dataclass
 class ModelRegistry:
     embedding_model_name: str = field(
@@ -28,6 +35,12 @@ _registry_lock = Lock()
 
 
 def _load_embedding_model(registry: ModelRegistry) -> None:
+    if not _env_flag("ENABLE_EMBEDDING_MODEL", True):
+        registry.embedding_model = None
+        registry.embedding_model_error = "Disabled by ENABLE_EMBEDDING_MODEL=false"
+        print("Resume embedding model disabled by environment.")
+        return
+
     try:
         from sentence_transformers import SentenceTransformer
 
@@ -41,6 +54,14 @@ def _load_embedding_model(registry: ModelRegistry) -> None:
 
 
 def _load_job_generator(registry: ModelRegistry) -> None:
+    if not _env_flag("ENABLE_JOB_GENERATOR", False):
+        registry.job_generator = None
+        registry.job_generator_mode = None
+        registry.job_generator_model = None
+        registry.job_generator_error = "Disabled by ENABLE_JOB_GENERATOR=false"
+        print("Job generator disabled by environment.")
+        return
+
     try:
         from transformers import pipeline
     except Exception as exc:  # pragma: no cover - depends on runtime environment
